@@ -164,4 +164,65 @@ To use trained TinyFormer weights with the C inference kernel in `litex_port/`:
 
   When `USE_TRAINED_WEIGHTS` is set to `1` at compile time (e.g. via compiler flags or a config header), `tinyformer.c` includes `trained_weights.h` and uses the exported arrays instead of the built-in zero-initialized placeholders. When it is `0` (default), the original placeholder weights are used.
 
+## UCI HAR End-to-End Demo
+
+This repository includes an end-to-end pipeline that trains a TinyFormer-based classifier on the UCI HAR dataset (using the raw inertial signals) and exports both:
+- Quantized TinyFormer encoder weights for the C implementation in `litex_port/tinyformer.c`, and
+- A small set of preprocessed demo samples that can be run on an FPGA target (VexRiscv + LiteX).
+
+### Steps to run the full pipeline
+
+From the repository root (`TinyML_algo/`), run:
+
+```bash
+python3 training/download_uci_har.py
+python3 training/preprocess_uci_har.py
+python3 training/train_tinyformer_uci_har.py
+python3 training/export_and_make_fpga_demo.py
+```
+
+- `download_uci_har.py` downloads and extracts the UCI HAR dataset into `data/uci_har/`.
+- `preprocess_uci_har.py` loads the raw inertial signals (6 channels × 128 timesteps), downsamples to 16 timesteps using average pooling, constructs 32-dimensional feature vectors per timestep, normalizes features using train mean/std, and saves `data/uci_har_processed.npz`.
+- `train_tinyformer_uci_har.py` trains a TinyFormer encoder + classifier head (S=16, D=32, FFN=64, 1 head, 6 classes), prints train/test accuracy, and saves:
+  - `artifacts/state_dict.pt` (TinyFormer encoder weights with keys `W_q`, `W_k`, `W_v`, `W_o`, `W_ff1`, `W_ff2`, `b_q`, `b_k`, `b_v`, `b_o`, `b_ff1`, `b_ff2`)
+  - `artifacts/classifier.npz` (classifier head weights `W_cls[6,32]`, `b_cls[6]`).
+- `export_and_make_fpga_demo.py`:
+  - Runs `tools/export_weights.py` on `artifacts/state_dict.pt` to create `litex_port/trained_weights.c/h`.
+  - Selects a small set of test samples, quantizes them to int8, and writes `litex_port/demo_samples.c/h`.
+  - Quantizes the classifier head weights and writes `litex_port/demo_classifier.c/h`.
+
+### Running the FPGA demo
+
+On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
+
+1. **Build firmware**  
+   Include the following files in your LiteX bare-metal build:
+   - `litex_port/tinyformer.c`, `litex_port/tinyformer.h`
+   - `litex_port/main.c` (checksum demo) or `litex_port/demo_main.c` (UCI HAR classification demo)
+   - `litex_port/trained_weights.c`, `litex_port/trained_weights.h`
+   - `litex_port/demo_samples.c`, `litex_port/demo_samples.h`
+   - `litex_port/demo_classifier.c`, `litex_port/demo_classifier.h`
+
+   Compile with:
+
+   ```bash
+   -DUSE_TRAINED_WEIGHTS=1
+   ```
+
+   so that `tinyformer.c` uses the trained weights exported by the Python tooling.
+
+2. **UART wiring**  
+   Implement `uart_write_char` in `main.c` or `demo_main.c` to write to the LiteX UART MMIO registers. The helper functions `uart_write_string` and the demo printing logic will then send checksums or predicted labels to the serial console.
+
+3. **Run via litex_term**  
+   After building the firmware ELF, run it on the FPGA using:
+
+   ```bash
+   litex_term --kernel firmware.elf
+   ```
+
+   - `main.c` will print a checksum of a single TinyFormer encoder pass.
+   - `demo_main.c` will iterate over the generated demo samples, run the TinyFormer encoder + classifier head, and print predicted vs expected activity labels for quick on-board validation.
+
+
 
