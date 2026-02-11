@@ -12,14 +12,14 @@
 
 #include "tinyformer.h"
 
-// --- Helper macros for saturation ---
+#ifndef USE_TRAINED_WEIGHTS
+// By default, keep placeholder weights unless explicitly enabled.
+#define USE_TRAINED_WEIGHTS 0
+#endif
 
-static int8_t saturate_int32_to_int8(int32_t x)
-{
-    if (x > 127) return 127;
-    if (x < -128) return -128;
-    return (int8_t)x;
-}
+#if USE_TRAINED_WEIGHTS
+#include "trained_weights.h"
+#else
 
 // --- Dummy weights (placeholders) -----------------------------------------
 // Real deployments should replace these with trained parameters.
@@ -43,6 +43,17 @@ static const int8_t b_v[TINYFORMER_D] = { 0 };
 static const int8_t b_o[TINYFORMER_D] = { 0 };
 static const int8_t b_ff1[TINYFORMER_FFN] = { 0 };
 static const int8_t b_ff2[TINYFORMER_D] = { 0 };
+
+#endif  // USE_TRAINED_WEIGHTS
+
+// --- Helper macros for saturation ---
+
+static int8_t saturate_int32_to_int8(int32_t x)
+{
+    if (x > 127) return 127;
+    if (x < -128) return -128;
+    return (int8_t)x;
+}
 
 // --- Internal working buffers (global, not on stack) ----------------------
 // Layout: [S][D] or [S][FFN] as specified.

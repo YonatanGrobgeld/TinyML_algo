@@ -126,3 +126,42 @@ Suggested next engineering steps:
 - **Extended testing**:  
   Add additional test cases and golden-reference comparisons (e.g., host-side Python or C reference) to validate the TinyFormer outputs across different inputs and weight configurations.
 
+## Training + Weight Export
+
+To use trained TinyFormer weights with the C inference kernel in `litex_port/`:
+
+- **Training checkpoint**:  
+  Train your TinyFormer encoder (S=16, D=32, FFN=64, 1 head) in PyTorch and save a `state_dict` containing at least the following keys:
+  - `W_q`, `W_k`, `W_v`, `W_o` with shape `[32, 32]`
+  - `W_ff1` with shape `[64, 32]` or `[32, 64]`
+  - `W_ff2` with shape `[32, 64]` or `[64, 32]`
+  - `b_q`, `b_k`, `b_v`, `b_o` with shape `[32]`
+  - `b_ff1` with shape `[64]`
+  - `b_ff2` with shape `[32]`
+
+- **Export to C weights**:  
+  From the repository root (`TinyML_algo/`), run:
+
+  ```bash
+  python3 tools/export_weights.py \
+      --checkpoint path/to/state_dict.pt \
+      --output-dir litex_port
+  ```
+
+  This generates:
+
+  - `litex_port/trained_weights.h`
+  - `litex_port/trained_weights.c`
+
+  containing quantized `int8_t` weights and biases that match the layout expected by `litex_port/tinyformer.c`.
+
+- **Enabling trained weights in C**:  
+  The TinyFormer implementation supports a compile-time switch:
+
+  ```c
+  #define USE_TRAINED_WEIGHTS 1
+  ```
+
+  When `USE_TRAINED_WEIGHTS` is set to `1` at compile time (e.g. via compiler flags or a config header), `tinyformer.c` includes `trained_weights.h` and uses the exported arrays instead of the built-in zero-initialized placeholders. When it is `0` (default), the original placeholder weights are used.
+
+
