@@ -6,7 +6,7 @@ This script:
   1) Runs tools/export_weights.py on artifacts/state_dict.pt to generate:
        - litex_port/trained_weights.h
        - litex_port/trained_weights.c
-  2) Loads data/uci_har_processed.npz and selects a small set of test samples.
+  2) Loads data/uci_har_processed/uci_har_processed.npz and selects a small set of test samples.
   3) Quantizes these samples to int8 using a global scale factor.
   4) Writes:
        - litex_port/demo_samples.h
@@ -178,7 +178,7 @@ def main() -> None:
     run_export_weights(repo_root)
 
     # 2) Load processed data and select demo samples.
-    data_path = repo_root / "data" / "uci_har_processed.npz"
+    data_path = repo_root / "data" / "uci_har_processed" / "uci_har_processed.npz"
     data = np.load(data_path)
     X_test = data["X_test"].astype(np.float32)  # [N_test, 16, 32]
     y_test = data["y_test"].astype(np.int64)

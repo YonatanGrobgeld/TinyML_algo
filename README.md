@@ -191,6 +191,23 @@ python3 training/export_and_make_fpga_demo.py
   - Selects a small set of test samples, quantizes them to int8, and writes `litex_port/demo_samples.c/h`.
   - Quantizes the classifier head weights and writes `litex_port/demo_classifier.c/h`.
 
+### What’s in this repo
+
+This repository is self-contained and includes:
+
+- **Raw dataset**: a copy of the UCI HAR Dataset under `data/uci_har_raw/`:
+  - `data/uci_har_raw/UCI_HAR_Dataset.zip`
+  - `data/uci_har_raw/UCI HAR Dataset/` (original folder structure from UCI, including inertial signal files).
+- **Processed dataset**: TinyFormer-ready tensors under `data/uci_har_processed/`:
+  - `data/uci_har_processed/uci_har_processed.npz` containing normalized `X_train`, `X_test` (shape `[N, 16, 32]`) and labels `y_train`, `y_test`.
+- **Trained artifacts**: under `artifacts/`:
+  - `artifacts/state_dict.pt` – TinyFormer encoder weights (`W_q`, `W_k`, `W_v`, `W_o`, `W_ff1`, `W_ff2`, and corresponding biases) ready for export.
+  - `artifacts/classifier.npz` – classifier head weights (`W_cls[6,32]`, `b_cls[6]`).
+- **FPGA-ready C exports**: under `litex_port/`:
+  - `trained_weights.c/h` – quantized int8 TinyFormer encoder weights matching `tinyformer.c`.
+  - `demo_samples.c/h` – a small set of test samples quantized to int8 with ground-truth labels.
+  - `demo_classifier.c/h` – quantized classifier head weights/biases.
+
 ### Running the FPGA demo
 
 On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
@@ -223,6 +240,89 @@ On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
 
    - `main.c` will print a checksum of a single TinyFormer encoder pass.
    - `demo_main.c` will iterate over the generated demo samples, run the TinyFormer encoder + classifier head, and print predicted vs expected activity labels for quick on-board validation.
+
+### Model Status: Pre-Trained (Ready for FPGA)
+
+- The TinyFormer encoder and classifier have been **trained on the UCI HAR dataset** using the scripts in `training/`.
+- The exported, FPGA-ready artifacts are **already committed**:
+  - `litex_port/trained_weights.c/h`
+  - `litex_port/demo_samples.c/h`
+  - `litex_port/demo_classifier.c/h`
+- This means your friend can clone the repo, build the LiteX firmware with these files, and immediately run the UCI HAR demo on the FPGA without retraining.
+
+### FPGA Quickstart — Nexys 4 DDR + VexRiscv + LiteX
+
+1. **Build LiteX SoC**  
+   - Use LiteX to build a VexRiscv-based SoC for the Nexys 4 DDR board with DDR2 enabled (as in the standard LiteX examples for this board).
+
+2. **Build firmware including these sources**  
+   Add the following C sources to your LiteX firmware build:
+   - `litex_port/tinyformer.c`
+   - `litex_port/demo_main.c`
+   - `litex_port/trained_weights.c`
+   - `litex_port/demo_samples.c`
+   - `litex_port/demo_classifier.c`
+
+   Make sure the corresponding headers are in the include path:
+   - `litex_port/tinyformer.h`
+   - `litex_port/demo_samples.h`
+   - `litex_port/demo_classifier.h`
+   - `litex_port/trained_weights.h`
+
+   Compile with:
+
+   ```bash
+   -DUSE_TRAINED_WEIGHTS=1
+   ```
+
+   so that `tinyformer.c` uses the trained weights from `trained_weights.c` instead of the placeholder zeros.
+
+3. **Wire UART MMIO**  
+   - In `demo_main.c`, implement `uart_write_char` using the LiteX-generated CSR headers (e.g. `build/<target>/software/include/generated/csr.h`):
+     - Poll `uart_txfull` until space is available.
+     - Write the character to `uart_rxtx`.
+   - The helper functions `uart_write_string` and the demo code will then print to the serial console.
+
+4. **Run firmware with litex_term**  
+   - After building the firmware ELF (e.g. `firmware.elf`), run:
+
+   ```bash
+   litex_term --kernel firmware.elf
+   ```
+
+   - `demo_main.c` will:
+     - Iterate over the committed demo samples.
+     - Run the TinyFormer encoder and classifier on each sample.
+     - Print lines of the form:
+
+       ```text
+       Sample 0: pred=<predicted_class> exp=<expected_class>
+       ```
+
+     where `pred` is the predicted activity class (0..5) and `exp` is the ground-truth label.
+
+### Re-training (Optional)
+
+If you want to retrain the model (e.g. to tweak hyperparameters or add data), you can rerun the training pipeline:
+
+```bash
+python3 training/download_uci_har.py              # only needed once
+python3 training/preprocess_uci_har.py
+python3 training/train_tinyformer_uci_har.py
+python3 training/export_and_make_fpga_demo.py
+```
+
+This will:
+- Regenerate `data/uci_har_processed/uci_har_processed.npz`.
+- Retrain the TinyFormer encoder + classifier and update:
+  - `artifacts/state_dict.pt`
+  - `artifacts/classifier.npz`
+- Re-export updated FPGA artifacts:
+  - `litex_port/trained_weights.c/h`
+  - `litex_port/demo_samples.c/h`
+  - `litex_port/demo_classifier.c/h`
+
+Rebuild your LiteX firmware after retraining to pick up the new weights and demo samples.
 
 
 

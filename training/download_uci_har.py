@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download the UCI HAR Dataset (raw IMU signals) into data/uci_har/.
+Download the UCI HAR Dataset (raw IMU signals) into data/uci_har_raw/.
 
 This script fetches the original zip archive from the UCI repository,
 extracts it under:
@@ -25,7 +25,7 @@ UCI_HAR_URL = (
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    data_dir = repo_root / "data" / "uci_har"
+    data_dir = repo_root / "data" / "uci_har_raw"
     data_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = data_dir / "UCI_HAR_Dataset.zip"

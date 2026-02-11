@@ -4,7 +4,7 @@ Train a TinyFormer-based classifier on UCI HAR (preprocessed) and export
 weights compatible with litex_port/tinyformer.c and tools/export_weights.py.
 
 Input:
-  data/uci_har_processed.npz (see preprocess_uci_har.py)
+  data/uci_har_processed/uci_har_processed.npz (see preprocess_uci_har.py)
 
 Output:
   artifacts/state_dict.pt   -- contains ONLY the TinyFormer encoder weights with
@@ -100,7 +100,7 @@ class TinyFormerHARModel(nn.Module):
 
 def train_model():
     repo_root = Path(__file__).resolve().parents[1]
-    data_path = repo_root / "data" / "uci_har_processed.npz"
+    data_path = repo_root / "data" / "uci_har_processed" / "uci_har_processed.npz"
     artifacts_dir = repo_root / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 

@@ -2,7 +2,7 @@
 """
 Preprocess UCI HAR raw inertial signals into TinyFormer-ready tensors.
 
-Input (from data/uci_har/UCI HAR Dataset/):
+Input (from data/uci_har_raw/UCI HAR Dataset/):
   - train/Inertial Signals/body_acc_{x,y,z}_train.txt
   - train/Inertial Signals/body_gyro_{x,y,z}_train.txt
   - test/Inertial Signals/body_acc_{x,y,z}_test.txt
@@ -11,7 +11,7 @@ Input (from data/uci_har/UCI HAR Dataset/):
 Each sample has 6 channels x 128 timesteps.
 
 Output:
-  data/uci_har_processed.npz containing:
+  data/uci_har_processed/uci_har_processed.npz containing:
     X_train: [N_train, 16, 32]
     y_train: [N_train] (labels 0..5)
     X_test : [N_test, 16, 32]
@@ -119,7 +119,7 @@ def downsample_and_features(raw: np.ndarray) -> np.ndarray:
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    uci_root = repo_root / "data" / "uci_har" / "UCI HAR Dataset"
+    uci_root = repo_root / "data" / "uci_har_raw" / "UCI HAR Dataset"
 
     train_raw = load_inertial_set(uci_root, "train")  # [N_train, 6, 128]
     test_raw = load_inertial_set(uci_root, "test")    # [N_test, 6, 128]
@@ -145,7 +145,7 @@ def main() -> None:
     X_train_norm = (X_train - mean) / std
     X_test_norm = (X_test - mean) / std
 
-    out_path = repo_root / "data" / "uci_har_processed.npz"
+    out_path = repo_root / "data" / "uci_har_processed" / "uci_har_processed.npz"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         out_path,
