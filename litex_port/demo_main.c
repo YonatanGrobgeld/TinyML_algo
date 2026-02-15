@@ -13,12 +13,15 @@
 #include "demo_samples.h"
 #include "demo_classifier.h"
 
-// UART stubs (same style as main.c)
+// UART: with LiteX define USE_LITEX_UART, add generated include path, link uart_litex.c.
+#ifdef USE_LITEX_UART
+#include "uart_litex.h"
+#else
 static void uart_write_char(char c)
 {
     (void)c;
-    // Implement: wait for TX ready, then store c into UART TX register.
 }
+#endif
 
 static void uart_write_string(const char *s)
 {

@@ -8,14 +8,16 @@
 #include <stdint.h>
 #include "tinyformer.h"
 
-// --- UART stubs -----------------------------------------------------------
-// Replace these with real LiteX UART MMIO accessors in your SoC.
-
+// --- UART ----------------------------------------------------------------
+// With LiteX: define USE_LITEX_UART, add generated include path, link uart_litex.c.
+#ifdef USE_LITEX_UART
+#include "uart_litex.h"
+#else
 static void uart_write_char(char c)
 {
     (void)c;
-    // Implement: wait for TX ready, then store c into UART TX register.
 }
+#endif
 
 static void uart_write_string(const char *s)
 {

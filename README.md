@@ -107,6 +107,92 @@ The `litex_port/` directory contains:
 
    This checksum can be compared against a host-side reference implementation to verify correctness.
 
+## FPGA / LiteX Integration Guide (for firmware & SoC side)
+
+This section is for the developer who owns the LiteX SoC build, bitstream, and firmware build system. It specifies exactly what is required to run this repo’s code on hardware.
+
+### 1. High-level architecture
+
+- **This repo provides**: algorithm and demo firmware source only (freestanding C under `litex_port/`). No SoC RTL, no bitstream, no firmware build system.
+- **External to this repo**: LiteX SoC target (e.g. `nexys4ddr.py`), memory map, firmware Makefile, linker script, startup/crt0, and UART MMIO wiring.
+- **Target**: Nexys4DDR + VexRiscv (RV32IM), bare-metal (no OS).
+
+### 2. Required LiteX SoC assumptions
+
+- **CPU**: VexRiscv, RV32IM.
+- **Runtime**: bare-metal; no OS, no threads.
+- **UART**: one UART peripheral must be enabled in the SoC, exposed in the generated CSR headers either as `uart` or as `serial`.
+- **RAM**: the region used for `.text`, `.rodata`, `.data`, and `.bss` (BRAM or DDR, depending on your LiteX config) must match the firmware linker script.
+
+### 3. Firmware build requirements
+
+Use these compiler flags when building the firmware that includes `litex_port/`:
+
+| Flag | Purpose |
+|------|--------|
+| `-ffreestanding` | Freestanding environment; no reliance on hosted libc startup. |
+| `-nostdlib` | Do not link libc; you provide startup and any stubs. |
+| `-march=rv32im` | Match VexRiscv ISA (or your exact variant). |
+| `-mabi=ilp32` | 32-bit ABI. |
+| `-O2` or `-O3` | Optimize for size/speed. |
+| `-DUSE_LITEX_UART` | Enable real UART in `uart_litex.c`; omit and UART is a no-op stub. |
+| `-DUSE_TRAINED_WEIGHTS=1` | Required for the UCI HAR demo so `tinyformer.c` uses `trained_weights.c`. |
+
+### 4. Include paths
+
+- Add the LiteX build’s software include directory so that `<generated/csr.h>` resolves, e.g.:
+  - `-I<litex_build>/software/include`
+- Typical layout: `<litex_build>/software/include/generated/csr.h`. The exact path depends on your LiteX target output.
+
+### 5. Files to compile and link
+
+Compile and link these **C sources** (headers are pulled in via `#include`):
+
+- `litex_port/tinyformer.c`
+- `litex_port/trained_weights.c`
+- `litex_port/demo_samples.c`
+- `litex_port/demo_classifier.c`
+- `litex_port/demo_main.c` (UCI HAR demo) **or** `litex_port/main.c` (checksum demo)
+- `litex_port/uart_litex.c`
+
+Ensure the compiler can find headers in `litex_port/` (e.g. `-I<path_to_repo>/litex_port` or add `litex_port` to your include path).
+
+### 6. UART behavior
+
+- **Mode**: blocking, polling only. No interrupts, no `printf`, no libc.
+- **Implementation**: `litex_port/uart_litex.c` selects the implementation at compile time using LiteX-generated CSR address macros:
+  - If `CSR_UART_RXTX_ADDR` is defined: uses `uart_txfull_read()` and `uart_rxtx_write()`.
+  - Else if `CSR_SERIAL_RXTX_ADDR` is defined: uses `serial_txfull_read()` and `serial_rxtx_write()`.
+  - If neither is defined (or `USE_LITEX_UART` is not set): compiles as a stub; no characters are sent.
+- **API**: the rest of the firmware calls `uart_write_char(char c)` only; `uart_write_string` and numeric printers in `main.c` / `demo_main.c` are built on top of it.
+
+### 7. What this repo does not provide
+
+- No LiteX SoC target (`.py`) or build scripts for the SoC.
+- No firmware Makefile, linker script (`.ld`), or startup/crt0.
+- No libc, newlib, or syscall stubs.
+- No assumptions about caches, MMU, or optional RISC-V extensions beyond what the code uses (RV32IM).
+
+You must supply the SoC, memory map, linker script, and startup code on the FPGA/LiteX side.
+
+### 8. Quick bring-up checklist
+
+- [ ] LiteX SoC builds and produces a bitstream and `generated/csr.h` (or equivalent).
+- [ ] Firmware build compiles all `litex_port/` sources above and links with your startup and linker script.
+- [ ] `-DUSE_LITEX_UART` and LiteX include path are set so UART is not the stub.
+- [ ] UART prints characters (e.g. checksum or demo text on the serial console).
+- [ ] For UCI HAR demo: `-DUSE_TRAINED_WEIGHTS=1`, and running the firmware shows lines like `pred=X exp=Y`.
+
+### 9. Common failure modes
+
+| Symptom | Likely cause |
+|--------|----------------|
+| No UART output | `-DUSE_LITEX_UART` not defined, or LiteX include path missing → `uart_litex.c` compiles as stub. |
+| Missing `csr.h` or CSR macros | Wrong or missing `-I<litex_build>/software/include`; build the LiteX SoC first and point to its `software/include`. |
+| UART still stub with LiteX | SoC may expose UART as `serial`; ensure `generated/csr.h` defines either `CSR_UART_RXTX_ADDR` or `CSR_SERIAL_RXTX_ADDR`. |
+| Link errors (e.g. `printf`, `malloc`) | Linking against libc by mistake; use `-nostdlib` and ensure no libc objects are linked. |
+| Crash or garbage output | Stack too small, or linker script places sections in wrong RAM region; align script with SoC memory map (BRAM/DDR). |
+
 ## Next Steps
 
 Suggested next engineering steps:
