@@ -12,6 +12,99 @@ The implementation under `litex_port/` is designed to:
 - **Platform**: tested/targeted for Nexys 4 DDR FPGA (LiteX SoC).
 - **Portability**: use only standard integer types and fixed-size buffers so it can be reused on other RV32-class MCUs and SoCs.
 
+---
+
+## FPGA Bring-Up & Benchmarking (Nexys4DDR + LiteX + VexRiscv) — Teammate Checklist
+
+Step-by-step playbook for the teammate who owns the FPGA / LiteX / VexRiscv side. Use this order; do not benchmark until correctness matches baseline.
+
+### A. Prerequisites (what exists where)
+
+- **This repo provides:** TinyFormer firmware sources (`litex_port/common/`, mode dirs), accelerator drivers (`hw_extensions/dot8/sw/`, `hw_extensions/exp_lut/sw/`, `hw_extensions/gemv/sw/`), self-tests (`litex_port/tests_dot8.c/h`, `tests_lut.c/h`, `tests_gemv.c/h`), and mode mains (baseline + 5 accelerated).
+- **This repo does NOT provide:** LiteX SoC target build scripts, bitstream build, linker script, crt0, generated CSR headers, or SoC memory map — those live in your LiteX build tree.
+- **Hardware assumptions:** VexRiscv RV32IM; UART present in SoC as `uart` or `serial`; SDRAM/main RAM usable for firmware (memtest must pass).
+
+### B. Known-good bring-up order (must be explicit)
+
+1. **Fix LiteX memory init first** — Memtest must pass. Resolve any SDRAM/MAIN-RAM init or timing issues before running TinyFormer firmware.
+2. **Build and run baseline firmware** — Use `litex_port/common/*` + `litex_port/baseline/main_baseline.c`. Confirm UART shows `MODE: BASELINE`, then `ENC_CKSUM=0x...` and `Sample i: pred=X exp=Y` for each sample. Save this log as the correctness reference.
+3. **Run self-tests** — In this order: **LUT** → **GEMV** → **DOT8**. Each test prints a PASS line on UART. See §10 and “Tests” in D below for sources and drivers to link.
+4. **Build accelerated modes one-by-one** — Add the right drivers and macros per mode (see D and E). For each mode, run and verify **correctness vs baseline** (same `ENC_CKSUM` and same `pred`/`exp` per sample).
+5. **Only then measure performance** — After all accelerated builds match baseline checksums and predictions, use cycle counter or timer (see G) to compare baseline vs each accel mode.
+
+### C. Where to find LiteX generated headers and how to include them
+
+- **Path:** Your LiteX build produces `<litex_build>/software/include`; CSR and peripheral accessors are in `generated/csr.h` under that include directory.
+- **Compile firmware with:**  
+  `-I<litex_build>/software/include`  
+  so that `#include <generated/csr.h>` resolves. Example (replace with your path):  
+  `-I/path/to/litex/build/nexys4ddr/software/include`
+- **UART selection:** `uart_litex.c` picks the implementation at compile time: if `CSR_UART_RXTX_ADDR` is defined (from `generated/csr.h`), it uses `uart_*`; else if `CSR_SERIAL_RXTX_ADDR` is defined, it uses `serial_*`. No code change needed — just ensure the correct macro is defined by your LiteX SoC.
+
+### D. What to compile/link (concise and exact)
+
+**Common to all demo builds:** From `litex_port/common/`: `tinyformer.c`, `demo_samples.c`, `demo_classifier.c`, `demo_runner.c`, `uart_litex.c`, `trained_weights.c`. Always link UART (`uart_litex.c`) for banner and `ENC_CKSUM` output.
+
+| Build | Main | Extra driver sources |
+|-------|------|----------------------|
+| **Baseline** | `litex_port/baseline/main_baseline.c` | none |
+| **DOT8 only** | `litex_port/accel_dot8/main_dot8.c` | `hw_extensions/dot8/sw/dot8.c` |
+| **LUT only** | `litex_port/accel_lut/main_lut.c` | `hw_extensions/exp_lut/sw/exp_lut.c` |
+| **GEMV only** | `litex_port/accel_gemv/main_gemv.c` | `hw_extensions/gemv/sw/gemv.c` |
+| **DOT8 + LUT** | `litex_port/accel_dot8_lut/main_dot8_lut.c` | `dot8.c` + `exp_lut.c` |
+| **All** | `litex_port/accel_all/main_all.c` | `dot8.c` + `exp_lut.c` + `gemv.c` |
+
+**Self-tests** (separate firmware or called from a test main):
+
+- **test_dot8:** `litex_port/tests_dot8.c`, `tests_dot8.h`, `hw_extensions/dot8/sw/dot8.c`, `uart_litex.c`. Include: `-I litex_port -I hw_extensions/dot8/sw` (and LiteX include path).
+- **test_lut:** `litex_port/tests_lut.c`, `tests_lut.h`, `hw_extensions/exp_lut/sw/exp_lut.c`, `uart_litex.c`. Include: `-I litex_port -I hw_extensions/exp_lut/sw`.
+- **test_gemv:** `litex_port/tests_gemv.c`, `tests_gemv.h`, `hw_extensions/gemv/sw/gemv.c`, `uart_litex.c`. Include: `-I litex_port -I hw_extensions/gemv/sw`.
+
+### E. Build flags (important ones)
+
+- **Common (all builds):**  
+  `-ffreestanding -nostdlib -march=rv32im -mabi=ilp32 -O2` (or `-O3`)
+- **Demo / weights:**  
+  `-DUSE_TRAINED_WEIGHTS=1`
+- **UART:**  
+  `-DUSE_LITEX_UART`
+- **LiteX headers:**  
+  `-I<litex_build>/software/include`
+- **DOT8 (only if Dot8Plugin is in the CPU build):**  
+  `-DUSE_DOT8_HW -I hw_extensions/dot8/sw`
+- **LUT:**  
+  `-DUSE_EXP_LUT_HW` and either `-DEXP_LUT_USE_LITEX_CSR` (with generated CSR) or `-DEXP_LUT_BASE=<addr>`. Include: `-I hw_extensions/exp_lut/sw`
+- **GEMV:**  
+  `-DUSE_GEMV_HW` and either `-DGEMV_USE_LITEX_CSR` or `-DGEMV_BASE=<addr>`. Include: `-I hw_extensions/gemv/sw`
+
+### F. Correctness gate (must be very explicit)
+
+For **each sample** in each accelerated run, verify:
+
+1. **`MODE: ...`** banner matches the build (e.g. `MODE: DOT8`, `MODE: DOT8 + LUT + GEMV`).
+2. **`ENC_CKSUM=0xXXXXXXXX`** is **identical** to the baseline run for that same sample index. If it differs, the accelerated path is wrong — **do not benchmark**; stop and debug.
+3. **`pred` / `exp`** match the baseline (same predicted and expected class per sample).
+
+Do **not** record or compare performance until every accelerated build passes this gate.
+
+### G. Performance measurement hooks (guidance only; don’t implement here)
+
+- Use a **LiteX timer/cycle counter** if your SoC exposes one (e.g. CSR timer), or read **RISC-V `mcycle`** (if the core exposes it) before and after `tinyformer_encode()` (or before/after the full demo loop).
+- **Order:** Run baseline once and record cycles per sample (or per encoder call); then run each accelerated mode and record the same. Compare cycles to see speedup.
+- This repo does not add cycle-count code; you add it in your main or in a thin wrapper around `demo_run()` / `tinyformer_encode()`.
+
+### H. Troubleshooting (short table)
+
+| Symptom | Likely cause / action |
+|--------|------------------------|
+| **No UART output** | Wrong UART name in SoC (check `CSR_UART_RXTX_ADDR` vs `CSR_SERIAL_RXTX_ADDR`); missing `-I<litex_build>/software/include`; or `-DUSE_LITEX_UART` not set. |
+| **Illegal instruction** | `USE_DOT8_HW` defined but VexRiscv built without Dot8Plugin → disable `-DUSE_DOT8_HW` or add plugin and rebuild SoC. |
+| **LUT returns wrong values** | CSR mapping / wrong base / index width; confirm exp_lut RTL and `generated/csr.h` match; check index 0..15 and Q10 output. |
+| **GEMV mismatch** | CSR strobes (START / CLEAR_DONE); Y read pointer advance (`Y_NEXT` write); endian or dimension (32 vs 64) mismatch. |
+| **ENC_CKSUM differs from baseline** | Accelerated math not identical to C path — stop benchmarking and fix encoder/accelerator path (scaling, saturation, or driver use). |
+
+---
+
 ## TinyFormer Encoder Algorithm
 
 The TinyFormer encoder block implemented here follows the standard Transformer encoder structure, specialized for int8 inference and streaming attention:
@@ -55,25 +148,23 @@ The TinyFormer implementation is designed for constrained, microcontroller-class
 
 ## Directory Structure
 
-At the top level of this repository:
+At the top level:
 
-- `pulp-transformer/` – Original PULP transformer kernels, tests, and documentation.
-- `litex_port/` – TinyFormer encoder and bare-metal test harness for VexRiscv + LiteX.
+- **`pulp-transformer/`** – Original PULP transformer kernels, tests, and documentation.
+- **`litex_port/`** – TinyFormer firmware for VexRiscv + LiteX (FPGA bring-up and benchmarking).
+- **`hw_extensions/`** – Accelerator RTL and SW: `dot8/`, `exp_lut/`, `gemv/` (each with `sw/` drivers and, where applicable, `litex/` or RTL).
 
-The `litex_port/` directory contains:
+**`litex_port/` layout (use this for bring-up):**
 
-- `tinyformer.h` – Model parameters and public API for the TinyFormer encoder block (fixed `S`, `D`, and FFN width).
-- `tinyformer.c` – TinyFormer encoder implementation:
-  - Q/K/V projections
-  - Streaming scaled dot-product attention with max-subtraction softmax and LUT
-  - Output projection and residual connection
-  - Feed-forward network (ReLU) and final residual
-  - Int8 weights/activations, int32 accumulators
-- `main.c` – Bare-metal test harness:
-  - Initializes a deterministic int8 input tensor
-  - Runs the TinyFormer encoder
-  - Computes a checksum over the output tensor
-  - Sends the checksum over UART using simple `uart_write_*` helpers
+- **`litex_port/common/`** – Shared sources for **all** builds: `tinyformer.c/h`, `demo_samples.c/h`, `demo_classifier.c/h`, `demo_runner.c/h`, `uart_litex.c/h`, `trained_weights.c/h`. No duplication of TinyFormer logic; always compile these for demo and mode mains.
+- **Six mode directories** (each with `main_*.c` + `README.md`):
+  - **`baseline/`** – No accelerators; correctness reference.
+  - **`accel_dot8/`**, **`accel_lut/`**, **`accel_gemv/`**, **`accel_dot8_lut/`**, **`accel_all/`** – Hardware-accelerated variants; same demo flow, different macros (see §11).
+- **Self-tests (in `litex_port/` root):** `tests_dot8.c/h`, `tests_lut.c/h`, `tests_gemv.c/h` — link with the corresponding driver (`dot8.c`, `exp_lut.c`, `gemv.c`) and UART; see §10 and playbook D.
+
+Legacy/original files also in `litex_port/` root: `tinyformer.h/c`, `main.c`, `demo_main.c`, `uart_litex.c/h`, `trained_weights.c/h`, `demo_samples.c/h`, `demo_classifier.c/h` (duplicated in `common/` for the new layout).
+
+TinyFormer encoder (`tinyformer.c`): Q/K/V projections; streaming scaled dot-product attention with max-subtraction softmax and LUT; output projection and residual; feed-forward (ReLU) and final residual; int8 weights/activations, int32 accumulators.
 
 ## How to Run on LiteX
 
@@ -192,6 +283,140 @@ You must supply the SoC, memory map, linker script, and startup code on the FPGA
 | UART still stub with LiteX | SoC may expose UART as `serial`; ensure `generated/csr.h` defines either `CSR_UART_RXTX_ADDR` or `CSR_SERIAL_RXTX_ADDR`. |
 | Link errors (e.g. `printf`, `malloc`) | Linking against libc by mistake; use `-nostdlib` and ensure no libc objects are linked. |
 | Crash or garbage output | Stack too small, or linker script places sections in wrong RAM region; align script with SoC memory map (BRAM/DDR). |
+
+### 10. Hardware extension self-tests (DOT8, Exp LUT, GEMV)
+
+Before integrating hardware accelerators into TinyFormer benchmarking, run the on-target self-tests to catch signedness, packing, and CSR issues.
+
+**DOT8** (`test_dot8`):
+
+- **Sources:** `litex_port/tests_dot8.c`, `litex_port/tests_dot8.h`, `hw_extensions/dot8/sw/dot8.c`, `hw_extensions/dot8/sw/dot8.h`. Link with UART (e.g. `uart_litex.c`).
+- **Include path:** `-I hw_extensions/dot8/sw` so `#include "dot8.h"` resolves.
+- **Optional:** Define `-DUSE_DOT8_HW` when the VexRiscv DOT8 custom instruction (custom-0, funct7=0x01) is present; otherwise the test runs with software fallback (SW vs SW) and still passes.
+- **PASS:** UART prints `DOT8 PASS`. **Typical failures:** wrong byte/lane order (packing), unsigned instead of signed lanes, or instruction encoding (opcode/funct7) mismatch between plugin and inline asm.
+
+**Exp LUT** (`test_lut`):
+
+- **Sources:** `litex_port/tests_lut.c`, `litex_port/tests_lut.h`, `hw_extensions/exp_lut/sw/exp_lut.c`, `hw_extensions/exp_lut/sw/exp_lut.h`. Link with UART.
+- **Include path:** `-I hw_extensions/exp_lut/sw`.
+- **Optional:** Define `-DUSE_EXP_LUT_HW` and either `-DEXP_LUT_USE_LITEX_CSR` (with generated CSR) or `-DEXP_LUT_BASE=<addr>` for raw MMIO. Without HW, the test uses the software golden table and passes.
+- **PASS:** UART prints `LUT PASS`. **Typical failures:** index not 0..15, output not Q10 (values don’t match `tinyformer.c` exp_lut[]), or CSR strobe/read behavior (e.g. wrong register for value read).
+
+**GEMV** (`test_gemv`):
+
+- See `hw_extensions/gemv/README.md` and `litex_port/tests_gemv.c`. Build with `gemv.c`, UART, and `-DUSE_LITEX_UART` / GEMV backend as needed. **PASS:** `GEMV self-test PASS`.
+
+**How to run:** From your firmware `main()`, call `test_dot8()`, `test_lut()`, and/or `test_gemv()`; non-zero return = fail. Use `litex_term` to see UART output. All tests are freestanding (no printf, malloc, or libc).
+
+### 11. Baseline vs Hardware-Accelerated Builds
+
+The `litex_port/` tree is organized so a teammate with the FPGA can run **baseline** TinyFormer (no extensions) and up to **five accelerated variants** (DOT8 only, LUT only, GEMV only, DOT8+LUT, or all three), then compare correctness and performance.
+
+#### Modes and enabled hardware
+
+| Mode            | Directory         | DOT8 | LUT | GEMV | Macros |
+|-----------------|-------------------|------|-----|------|--------|
+| Baseline        | `litex_port/baseline/`       | off | off | off | *(none)* |
+| DOT8 only       | `litex_port/accel_dot8/`     | on  | off | off | `USE_DOT8_HW` |
+| LUT only        | `litex_port/accel_lut/`      | off | on  | off | `USE_EXP_LUT_HW` |
+| GEMV only       | `litex_port/accel_gemv/`     | off | off | on  | `USE_GEMV_HW` |
+| DOT8 + LUT      | `litex_port/accel_dot8_lut/`  | on  | on  | off | `USE_DOT8_HW`, `USE_EXP_LUT_HW` |
+| DOT8 + LUT + GEMV | `litex_port/accel_all/`     | on  | on  | on  | all three |
+
+#### Feature macros
+
+- **`USE_DOT8_HW`** — When defined: use DOT8 custom instruction (VexRiscv plugin) for int8 dot-products. When undefined: pure C path; no custom instruction.
+- **`USE_EXP_LUT_HW`** — When defined: use Exp LUT peripheral for softmax. When undefined: use in-code LUT in `tinyformer.c`; no MMIO.
+- **`USE_GEMV_HW`** — When defined: use GEMV peripheral for matrix-vector ops. When undefined: pure C matvec; no GEMV MMIO.
+
+**Rule:** When a flag is **not** defined, the corresponding hardware must not be used (no illegal instruction, no MMIO access to that block).
+
+#### SoC requirements
+
+- **Baseline:** Plain VexRiscv (RV32IM); no DOT8 plugin, no Exp LUT, no GEMV. Always runs on an unmodified core.
+- **Accelerated modes:** The SoC must include the corresponding blocks:
+  - DOT8 → VexRiscv built with Dot8Plugin.
+  - LUT → LiteX `exp_lut` peripheral and CSR.
+  - GEMV → LiteX GEMV peripheral and CSR (or documented base address).
+
+#### Expected behavior
+
+- **Baseline** always works on plain VexRiscv and is the **correctness reference**. Accelerated builds must produce the same `pred=X exp=Y` outputs as baseline (for the same demo samples and weights) before any performance comparison.
+- **Accelerated** builds require the matching hardware; running an accelerated firmware on an SoC that does not have that block can cause illegal instruction or bus faults.
+- **Correctness checksum:** For each sample the demo prints `ENC_CKSUM=0xXXXXXXXX` (32-bit checksum over the encoder output `[16][32]`). This value must be identical across baseline and all accelerated modes for the same sample; if it differs, the accelerated path is not correct before benchmarking.
+
+#### Build examples (CFLAGS)
+
+Use `litex_port/common/` for shared sources and the chosen `main_*.c` from the mode directory. All builds need `-I litex_port/common` and typically `-DUSE_TRAINED_WEIGHTS=1` and `-DUSE_LITEX_UART` for the demo.
+
+```bash
+# Baseline (no accelerator macros)
+CFLAGS += -I litex_port/common
+# Compile: common/*.c + baseline/main_baseline.c
+
+# DOT8 only
+CFLAGS += -DUSE_DOT8_HW -I litex_port/common -I hw_extensions/dot8/sw
+# + link hw_extensions/dot8/sw/dot8.c, compile accel_dot8/main_dot8.c
+
+# LUT only
+CFLAGS += -DUSE_EXP_LUT_HW -I litex_port/common -I hw_extensions/exp_lut/sw
+# + link exp_lut driver, compile accel_lut/main_lut.c
+
+# GEMV only
+CFLAGS += -DUSE_GEMV_HW -I litex_port/common -I hw_extensions/gemv/sw
+# + link hw_extensions/gemv/sw/gemv.c, compile accel_gemv/main_gemv.c
+
+# DOT8 + LUT
+CFLAGS += -DUSE_DOT8_HW -DUSE_EXP_LUT_HW -I litex_port/common -I hw_extensions/dot8/sw -I hw_extensions/exp_lut/sw
+# + link dot8 and exp_lut, compile accel_dot8_lut/main_dot8_lut.c
+
+# DOT8 + LUT + GEMV (all)
+CFLAGS += -DUSE_DOT8_HW -DUSE_EXP_LUT_HW -DUSE_GEMV_HW -I litex_port/common \
+  -I hw_extensions/dot8/sw -I hw_extensions/exp_lut/sw -I hw_extensions/gemv/sw
+# + link all three drivers, compile accel_all/main_all.c
+```
+
+#### Files to compile/link per mode
+
+All modes use **common** sources from `litex_port/common/`: `tinyformer.c`, `demo_samples.c`, `demo_classifier.c`, `demo_runner.c`, `uart_litex.c`, `trained_weights.c`. Headers as needed; include path `-I litex_port/common`. **UART:** always compile and link `litex_port/common/uart_litex.c` so banner and demo output (including `ENC_CKSUM=`) are printed.
+
+- **Baseline**  
+  - Compile/link: `litex_port/common/*.c` (all of the above), `litex_port/baseline/main_baseline.c`.  
+  - No accelerator drivers.
+
+- **DOT8 only**  
+  - Compile/link: same common sources + `litex_port/accel_dot8/main_dot8.c`, **`hw_extensions/dot8/sw/dot8.c`** (DOT8 driver).  
+  - Include: `-I litex_port/common -I hw_extensions/dot8/sw`.
+
+- **LUT only**  
+  - Compile/link: same common sources + `litex_port/accel_lut/main_lut.c`, **`hw_extensions/exp_lut/sw/exp_lut.c`** (Exp LUT driver).  
+  - Include: `-I litex_port/common -I hw_extensions/exp_lut/sw`.
+
+- **GEMV only**  
+  - Compile/link: same common sources + `litex_port/accel_gemv/main_gemv.c`, **`hw_extensions/gemv/sw/gemv.c`** (GEMV driver).  
+  - Include: `-I litex_port/common -I hw_extensions/gemv/sw`.
+
+- **DOT8 + LUT**  
+  - Compile/link: same common sources + `litex_port/accel_dot8_lut/main_dot8_lut.c`, **`hw_extensions/dot8/sw/dot8.c`**, **`hw_extensions/exp_lut/sw/exp_lut.c`**.  
+  - Include: `-I litex_port/common -I hw_extensions/dot8/sw -I hw_extensions/exp_lut/sw`.
+
+- **DOT8 + LUT + GEMV (all)**  
+  - Compile/link: same common sources + `litex_port/accel_all/main_all.c`, **`hw_extensions/dot8/sw/dot8.c`**, **`hw_extensions/exp_lut/sw/exp_lut.c`**, **`hw_extensions/gemv/sw/gemv.c`**.  
+  - Include: `-I litex_port/common -I hw_extensions/dot8/sw -I hw_extensions/exp_lut/sw -I hw_extensions/gemv/sw`.
+
+#### Run order and benchmarking
+
+1. **Run baseline first** on the FPGA (e.g. build with `baseline/main_baseline.c`). Capture UART output; note the `MODE: BASELINE` banner and all `Sample i: pred=X exp=Y` lines.
+2. **Run accelerator self-tests** (`test_dot8`, `test_lut`, `test_gemv`) as in §10 so that each block is known good.
+3. **Build and run each accelerated mode** (DOT8, LUT, GEMV, DOT8+LUT, all). Each firmware prints a single banner (`MODE: DOT8`, `MODE: LUT`, etc.) so logs are self-identifying.
+4. **Confirm correctness:** Accelerated outputs must match baseline: same `ENC_CKSUM=0xXXXXXXXX` per sample and same `pred`/`exp`. Only then compare performance.
+5. **Then** measure performance (e.g. cycle counts) for baseline vs each accelerated variant.
+
+#### Directory layout (litex_port)
+
+- **`common/`** — Shared algorithm and support: `tinyformer.c/h`, `demo_samples.c/h`, `demo_classifier.c/h`, `demo_runner.c/h`, `uart_litex.c/h`, `trained_weights.c/h`. No duplication of TinyFormer logic.
+- **`baseline/`** — `main_baseline.c`; no macros.
+- **`accel_dot8/`**, **`accel_lut/`**, **`accel_gemv/`**, **`accel_dot8_lut/`**, **`accel_all/`** — Each has a `main_*.c` that prints the correct banner and calls the same `demo_run()` from common.
 
 ## Next Steps
 
