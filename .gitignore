@@ -1,2 +1,11 @@
 # Python virtualenv (do not commit)
 .venv/
+
+# Build artifacts
+*.o
+*.bin
+*.elf
+*.v
+
+# LiteX generated files
+litex_port/generated/

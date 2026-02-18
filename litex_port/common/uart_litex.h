@@ -18,6 +18,12 @@ extern "C" {
 /* Write a single character to the LiteX UART (blocking until TX not full). */
 void uart_write_char(char c);
 
+/* Read a single character from the LiteX UART (blocking until RX not empty). */
+char uart_read_char(void);
+
+/* Write a null-terminated string to the LiteX UART. */
+void uart_write_string(const char *s);
+
 #ifdef __cplusplus
 }
 #endif
