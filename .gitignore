@@ -1,7 +1,6 @@
 # Python virtualenv (do not commit)
 .venv/
 
-<<<<<<< HEAD
 # Build artifacts
 *.o
 *.bin
@@ -10,7 +9,7 @@
 
 # LiteX generated files
 litex_port/generated/
-=======
+
 # Vivado/xsim simulation artifacts
 *.vcd
 *.wdb
@@ -21,4 +20,3 @@ xsim.dir/
 *.str
 xsim_*.tcl
 *.out
->>>>>>> origin/main
