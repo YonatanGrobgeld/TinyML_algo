@@ -637,5 +637,50 @@ This will:
 
 Rebuild your LiteX firmware after retraining to pick up the new weights and demo samples.
 
+## Standalone Hardware Verification (Vivado 2025.2)
+
+This repository includes standalone SystemVerilog testbenches for:
+
+- GEMV hardware extension (`tb_gemv.sv`)
+- LUT hardware extension (`tb_lut.sv`)
+
+### Requirements
+
+- Vivado 2025.2
+- xsim simulator
+
+### How to Run
+
+From the repository root in Vivado Tcl console:
+
+```tcl
+source run_gemv_xsim.tcl
+source run_lut_xsim.tcl
+```
+
+This will:
+
+- Compile DUT and testbench
+- Elaborate simulation
+- Run all tests
+- Generate:
+  - `tb_gemv.vcd`
+  - `tb_lut.vcd`
+
+### Test Coverage
+
+GEMV testbench includes:
+
+- Deterministic test
+- Randomized test (LCG-based deterministic seed)
+- Boundary test (INT8 min/max)
+
+LUT testbench includes:
+
+- Full address sweep
+- Value comparison against `expected_lut.mem`
+
+All tests use `$fatal` on mismatch and print PASS/FAIL messages.
+
 
 

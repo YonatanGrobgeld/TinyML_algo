@@ -1,2 +1,12 @@
 # Python virtualenv (do not commit)
 .venv/
+
+# Vivado/xsim simulation artifacts
+*.vcd
+*.wdb
+xsim.dir/
+*.log
+*.jou
+*.pb
+*.str
+xsim_*.tcl
