@@ -3,7 +3,7 @@ set -e
 
 # Define source paths
 LITEX_PROJECT_ROOT="/home/yonatang/litex-project"
-LITEX_BUILD_INCLUDE="$LITEX_PROJECT_ROOT/build/software/include"
+LITEX_BUILD_INCLUDE="$LITEX_PROJECT_ROOT/hw/build/software/include"
 LITEX_SOC_INCLUDE="$LITEX_PROJECT_ROOT/third_party/litex/litex/litex/soc/software/include"
 VEXRISCV_DIR="$LITEX_PROJECT_ROOT/third_party/litex/litex/litex/soc/cores/cpu/vexriscv"
 

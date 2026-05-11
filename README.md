@@ -170,35 +170,40 @@ TinyFormer encoder (`tinyformer.c`): Q/K/V projections; streaming scaled dot-pro
 
 ## How to Run on LiteX
 
-1. **Integrate sources into your LiteX firmware build**  
-   Add the following files to your LiteX firmware or standalone bare-metal build:
-   - `litex_port/tinyformer.c`
-   - `litex_port/tinyformer.h`
-   - `litex_port/main.c`
+The firmware is built with `litex_port/Makefile`. The SoC bitstream lives in the companion `litex-project` repository.
 
-2. **Wire UART stubs to LiteX UART MMIO**  
-   In `litex_port/main.c`, the function:
-   - `uart_write_char(char c)`  
-   is currently a stub and must be implemented using your LiteX UART registers (e.g. `UART_RXTX` and `UART_TXFULL`). `uart_write_string` and `uart_write_hex32` are built on top of `uart_write_char` and will work once this function is wired.
+### Quick start (Nexys4 DDR + all accelerators)
 
-3. **Build as a LiteX bare-metal kernel/firmware**  
-   Use your existing LiteX build flow to compile the firmware for VexRiscv (RV32IM). The result should be an ELF file, for example:
-   - `firmware.elf`
-
-4. **Load and run with `litex_term`**  
-   With the FPGA bitstream and LiteX SoC loaded onto the Nexys 4 DDR:
+1. **Build firmware (Linux)**
 
    ```bash
-   litex_term --kernel firmware.elf
+   cd litex_port
+   make TARGET=accel_all
+   # produces firmware.bin (and firmware.elf)
+   cp firmware.bin /media/sf_Final_Project/accelerators/accel_all/
    ```
 
-   The TinyFormer test harness will run on reset, execute a single encoder block, and print a checksum line on the LiteX UART console similar to:
+   Available targets: `baseline`, `accel_dot8`, `accel_lut`, `accel_gemv`, `accel_dot8_lut`, `accel_all`
 
-   ```text
-   TinyFormer checksum: 0xXXXXXXXX
+2. **Load via litex_term (Windows PowerShell)**
+
+   ```powershell
+   python -m litex.tools.litex_term --kernel C:\Final_Project\accelerator\firmware.bin COM3
    ```
 
-   This checksum can be compared against a host-side reference implementation to verify correctness.
+   > If `litex_term` is not on PATH: `pip install litex`, then use the `python -m` form above.
+
+3. **Trigger inference (UART)**
+
+   The firmware loops printing `Ready`. Send `s` over the terminal to start one inference run. Output:
+
+   ```
+   CYCLES=<N>
+   TIME_US=<N>
+   Done
+   ```
+
+   `TIME_US` is measured by the on-chip 100 MHz timer and is the recommended metric for benchmarking.
 
 ## FPGA / LiteX Integration Guide (for firmware & SoC side)
 
@@ -422,22 +427,9 @@ All modes use **common** sources from `litex_port/common/`: `tinyformer.c`, `dem
 
 ## Next Steps
 
-Suggested next engineering steps:
+- **Benchmark all modes**: Run each firmware target (`baseline`, `accel_dot8`, `accel_lut`, `accel_gemv`, `accel_dot8_lut`, `accel_all`) on hardware and record `TIME_US` to compute per-accelerator speedup vs baseline.
 
-- **UART integration**:  
-  Replace the body of `uart_write_char` in `litex_port/main.c` with real LiteX UART MMIO operations so that the checksum is visible on the serial console.
-
-- **Load real weights**:  
-  Replace the placeholder zero-initialized weight and bias arrays in `litex_port/tinyformer.c` with trained, quantized int8 parameters exported from your training pipeline.
-
-- **Add cycle counting**:  
-  Instrument performance by reading the RISC-V cycle counter (`rdcycle`) before and after `tinyformer_encode` to measure latency on VexRiscv.
-
-- **Hardware acceleration**:  
-  Identify the critical matmul and attention loops in `tinyformer.c` and consider offloading them to FPGA accelerators or tightly coupled custom instructions, while preserving the same C API.
-
-- **Extended testing**:  
-  Add additional test cases and golden-reference comparisons (e.g., host-side Python or C reference) to validate the TinyFormer outputs across different inputs and weight configurations.
+- **Extended testing**: Add additional test cases and golden-reference comparisons (host-side Python or C reference) to validate TinyFormer outputs across different inputs and weight configurations.
 
 ## Training + Weight Export
 
@@ -545,10 +537,10 @@ On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
    Implement `uart_write_char` in `main.c` or `demo_main.c` to write to the LiteX UART MMIO registers. The helper functions `uart_write_string` and the demo printing logic will then send checksums or predicted labels to the serial console.
 
 3. **Run via litex_term**  
-   After building the firmware ELF, run it on the FPGA using:
+   After building the firmware, load it on the FPGA using:
 
-   ```bash
-   litex_term --kernel firmware.elf
+   ```powershell
+   python -m litex.tools.litex_term --kernel firmware.bin COM3
    ```
 
    - `main.c` will print a checksum of a single TinyFormer encoder pass.
@@ -597,10 +589,10 @@ On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
    - The helper functions `uart_write_string` and the demo code will then print to the serial console.
 
 4. **Run firmware with litex_term**  
-   - After building the firmware ELF (e.g. `firmware.elf`), run:
+   - After building the firmware, load it on the FPGA (Windows PowerShell):
 
-   ```bash
-   litex_term --kernel firmware.elf
+   ```powershell
+   python -m litex.tools.litex_term --kernel firmware.bin COM3
    ```
 
    - `demo_main.c` will:
