@@ -5,6 +5,9 @@
 *.o
 *.bin
 *.elf
+# Track prebuilt Nexys4DDR firmware for teammates (accel_all); override global ignores:
+!litex_port/firmware.bin
+!litex_port/firmware.elf
 *.v
 
 # Vivado/xsim simulation artifacts
