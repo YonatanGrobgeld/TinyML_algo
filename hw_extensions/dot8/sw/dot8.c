@@ -7,6 +7,7 @@
 
 #include "dot8.h"
 
+#if !defined(USE_DOT8_HW)
 /* Software reference: signed int8 lanes, int32 result. */
 static int32_t dot8_sw(uint32_t a_packed, uint32_t b_packed)
 {
@@ -20,17 +21,17 @@ static int32_t dot8_sw(uint32_t a_packed, uint32_t b_packed)
     int32_t b3 = (int32_t)(int8_t)(b_packed >> 24);
     return a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3;
 }
+#endif
 
 int32_t dot8_4_lanes(uint32_t a_packed, uint32_t b_packed)
 {
 #if defined(USE_DOT8_HW)
     int32_t result;
-    /* custom-0 opcode 0x0B, funct7=0x01; rd = dot-product of rs1/rs2 (4x signed int8). */
+    /* custom-0 opcode 0x0B, funct3=0, funct7=0x01; rd = dot(rs1,rs2). Use .insn for binutils portability. */
     __asm__ volatile (
-        "custom0 1, %0, %1, %2"
+        ".insn r 0x0b, 0, 0x01, %0, %1, %2"
         : "=r"(result)
         : "r"(a_packed), "r"(b_packed)
-        /* no clobbers: instruction uses only reg operands */
     );
     return result;
 #else

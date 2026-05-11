@@ -1,15 +1,17 @@
 # Building TinyML Firmware for Litex Nexys4DDR
 
 This directory contains the firmware source code for the TinyFormer model on RISC-V.
-The environment has been set up to build completely within this repository, using artifacts integrated from the Litex project.
+The environment has been set up to build within this repository: **`litex_port/generated/`** includes a copy of LiteX `csr.h` (and related headers) so a plain `make` can find `#include <generated/csr.h>`.
 
-## setup
+## setup (optional)
 
-If you haven't already, run the setup script to copy necessary headers and startup code:
+If your SoC differs from the checked-in CSR map, either refresh `litex_port/generated/` from your LiteX build output, or run:
 
 ```bash
 ./setup_build.sh
 ```
+
+(point `LITEX_BUILD_INCLUDE` in that script at your build tree).
 
 ## Building
 
