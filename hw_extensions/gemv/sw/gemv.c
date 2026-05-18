@@ -77,12 +77,15 @@ void gemv_load_b(const int32_t *b, int out_dim)
 
 void gemv_start(int len, int out_dim, int enable_bias)
 {
-    /* Set config bits and start; one write generates start pulse on LiteX wrapper */
-    uint32_t ctrl = GEMV_CTRL_START;
-    if (len == 64)     ctrl |= GEMV_CTRL_LEN_64;
-    if (out_dim == 64) ctrl |= GEMV_CTRL_OUT_DIM_64;
-    if (enable_bias)   ctrl |= GEMV_CTRL_ENABLE_BIAS;
-    GEMV_WRITE_CTRL(ctrl);
+    uint32_t config = 0;
+    if (len == 64)     config |= GEMV_CTRL_LEN_64;
+    if (out_dim == 64) config |= GEMV_CTRL_OUT_DIM_64;
+    if (enable_bias)   config |= GEMV_CTRL_ENABLE_BIAS;
+    /* Write config bits first so ctrl.storage latches them before START fires.
+     * The LiteX wrapper reads len_64/out_dim_64/bias_en from ctrl.storage (registered),
+     * not from dat_w, so a separate write is needed to set them up. */
+    GEMV_WRITE_CTRL(config);
+    GEMV_WRITE_CTRL(config | GEMV_CTRL_START);
 }
 
 void gemv_wait_done(void)

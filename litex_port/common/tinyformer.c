@@ -12,6 +12,16 @@
 
 #include "tinyformer.h"
 
+#ifdef USE_DOT8_HW
+#include "dot8.h"
+#endif
+#ifdef USE_EXP_LUT_HW
+#include "exp_lut.h"
+#endif
+#ifdef USE_GEMV_HW
+#include "gemv.h"
+#endif
+
 #ifndef USE_TRAINED_WEIGHTS
 // By default, keep placeholder weights unless explicitly enabled.
 #define USE_TRAINED_WEIGHTS 0
@@ -74,6 +84,7 @@ static uint16_t exp_buf[TINYFORMER_S];  // approximate exp values for softmax
 // We use a simple integer LUT for exp(x) over x in [-15, 0], scaled by 2^10.
 // Index = -clamped_x where clamped_x is in [-15, 0].
 
+#ifndef USE_EXP_LUT_HW
 static const uint16_t exp_lut[16] = {
     1024, // e^0   ~ 1.0  * 2^10
      754, // e^-1  ~ 0.74
@@ -92,6 +103,7 @@ static const uint16_t exp_lut[16] = {
       16, // e^-14
       12  // e^-15
 };
+#endif /* USE_EXP_LUT_HW */
 
 // Convert a scaled score to an index into exp_lut.
 // Input: int16_t x, we clamp x to [-15, 0] and return -x as index.
@@ -102,7 +114,11 @@ static uint16_t score_to_exp(int16_t x)
     } else if (x < -15) {
         x = -15;
     }
+#ifdef USE_EXP_LUT_HW
+    return exp_lut_hw((unsigned)(-x));
+#else
     return exp_lut[(uint16_t)(-x)];
+#endif
 }
 
 // --- Small helpers --------------------------------------------------------
@@ -121,15 +137,37 @@ static void matvec_i8_i32_acc(
     int32_t       d_in,
     int32_t       d_out)
 {
+#ifdef USE_GEMV_HW
+    /* GEMV hardware path: stream X, W, b; wait; read Y; apply shift+saturate. */
+    static int32_t b32[TINYFORMER_FFN];  /* max bias dim = FFN = 64 */
+    static int32_t y32[TINYFORMER_FFN];  /* max output dim */
+    int32_t i;
+    for (i = 0; i < d_out; i++) b32[i] = (int32_t)b[i];
+    gemv_clear_done();
+    gemv_load_x(in, (int)d_in);
+    gemv_load_w(W, (int)d_out, (int)d_in);
+    gemv_load_b(b32, (int)d_out);
+    gemv_start((int)d_in, (int)d_out, 1);
+    gemv_wait_done();
+    gemv_read_y(y32, (int)d_out);
+    for (i = 0; i < d_out; i++)
+        out[i] = saturate_int32_to_int8(y32[i] >> 7);
+#else
     int32_t od, id;
     for (od = 0; od < d_out; ++od) {
         const int8_t *w_row = &W[od * d_in];
         int32_t acc = (int32_t)b[od];
-        for (id = 0; id < d_in; ++id) {
+#ifdef USE_DOT8_HW
+        /* DOT8 path: process 4 lanes at a time (d_in is always 32 or 64). */
+        for (id = 0; id < d_in; id += 4)
+            acc += dot8_4_lanes(dot8_pack(&in[id]), dot8_pack(&w_row[id]));
+#else
+        for (id = 0; id < d_in; ++id)
             acc += (int32_t)w_row[id] * (int32_t)in[id];
-        }
-        out[od] = saturate_int32_to_int8(acc >> 7); // crude scaling to keep in int8 range
+#endif
+        out[od] = saturate_int32_to_int8(acc >> 7);
     }
+#endif
 }
 
 // Linear projection for all tokens:
@@ -176,9 +214,13 @@ static void attention_single_head(
         int32_t max_score = -2147483647;
         for (j = 0; j < TINYFORMER_S; ++j) {
             int32_t acc = 0;
-            for (d = 0; d < TINYFORMER_D; ++d) {
+#ifdef USE_DOT8_HW
+            for (d = 0; d < TINYFORMER_D; d += 4)
+                acc += dot8_4_lanes(dot8_pack(&q[i][d]), dot8_pack(&k[j][d]));
+#else
+            for (d = 0; d < TINYFORMER_D; ++d)
                 acc += (int32_t)q[i][d] * (int32_t)k[j][d];
-            }
+#endif
 
             // Approximate scaling by 1/sqrt(D) ≈ 1/6 using a shift.
             // With D=32, scores can be large; we right‑shift by 5 bits
@@ -241,40 +283,18 @@ static void ffn_apply(
 {
     int32_t s, d;
 
-    // First layer + ReLU
+    // First layer: W_ff1[FFN][D] * in[s] + b_ff1 -> hidden[s], then ReLU
     for (s = 0; s < TINYFORMER_S; ++s) {
-        // h = W_ff1 * in[s] + b_ff1
-        // W_ff1: [FFN][D]
-        for (d = 0; d < TINYFORMER_FFN; ++d) {
-            const int8_t *w_row = &W_ff1[d][0];
-            int32_t acc = (int32_t)b_ff1[d];
-            int32_t k;
-            for (k = 0; k < TINYFORMER_D; ++k) {
-                acc += (int32_t)w_row[k] * (int32_t)in[s][k];
-            }
-            // Simple scaling then ReLU in int8 space.
-            acc >>= 7;
-            if (acc < 0) {
-                hidden[s][d] = 0;
-            } else {
-                hidden[s][d] = saturate_int32_to_int8(acc);
-            }
-        }
+        matvec_i8_i32_acc(&in[s][0], &hidden[s][0], &W_ff1[0][0], b_ff1,
+                          TINYFORMER_D, TINYFORMER_FFN);
+        for (d = 0; d < TINYFORMER_FFN; ++d)
+            if (hidden[s][d] < 0) hidden[s][d] = 0;
     }
 
-    // Second layer
-    for (s = 0; s < TINYFORMER_S; ++s) {
-        for (d = 0; d < TINYFORMER_D; ++d) {
-            const int8_t *w_row = &W_ff2[d][0];
-            int32_t acc = (int32_t)b_ff2[d];
-            int32_t k;
-            for (k = 0; k < TINYFORMER_FFN; ++k) {
-                acc += (int32_t)w_row[k] * (int32_t)hidden[s][k];
-            }
-            acc >>= 7;
-            out[s][d] = saturate_int32_to_int8(acc);
-        }
-    }
+    // Second layer: W_ff2[D][FFN] * hidden[s] + b_ff2 -> out[s]
+    for (s = 0; s < TINYFORMER_S; ++s)
+        matvec_i8_i32_acc(&hidden[s][0], &out[s][0], &W_ff2[0][0], b_ff2,
+                          TINYFORMER_FFN, TINYFORMER_D);
 }
 
 // --- Public entry point ---------------------------------------------------
