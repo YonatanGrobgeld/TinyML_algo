@@ -1,4 +1,4 @@
-# GEMV accelerator — specification
+# GEMV accelerator — specification (v2)
 
 ## Overview
 
@@ -9,6 +9,15 @@ The GEMV block computes **Y = W × X + b**:
 - **Y**: int32 output vector, length `OUT_DIM`.
 
 All multiplies are int8×int8; accumulation is int32. No scaling or saturation inside the block — software is responsible for requantizing Y to int8 if needed.
+
+## v2 changes vs v1
+
+**This spec covers the v2 hardware.** The two material changes from v1:
+
+1. `X_IN` and `W_IN` CSRs are now **32-bit** (each write delivers 4 packed signed int8 lanes — byte 0 = lane 0 in LSB). v1 was 8-bit / 1 lane per write.
+2. The internal compute path is a **4-lane parallel signed-int8 multiply-accumulate per cycle** (was 1-lane). A 32×32 matvec runs in **256 cycles** instead of 1024.
+
+Net effect: ~4× less CPU↔GEMV CSR-bus traffic for X and W loading, and ~4× faster on-chip compute. Driver and hardware are not register-compatible across versions — v1 driver on v2 HW corrupts the input vectors.
 
 ## Supported shapes and data types
 

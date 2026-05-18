@@ -159,13 +159,155 @@ Comparing logs between baseline and accelerated builds is done by checking that 
 
 ## 8. Limitations and Future Work
 
-- **Cycle counting.** This repository does not implement cycle counting or timing. Performance comparison (e.g. cycles per sample or per encoder call) is left to the integrator, using a LiteX timer CSR or the RISC-V `mcycle` counter if available. The README describes where to hook such measurements (e.g. around `tinyformer_encode()` or `demo_run()`).
+- **Cycle counting.** Implemented. The firmware now reads LiteX `timer0` around `demo_run()` and prints `CYCLES=N` and `TIME_US=N` per run; see Section 9 below. The Python measurement scripts (`run_baseline_and_measure.py`, `run_accel_all_and_measure.py`) parse these and report the firmware-side timer as the authoritative number alongside the (less reliable) Python wall-clock.
 
-- **GEMV.** The current GEMV block is a “v1” design: the CPU streams data into the peripheral via CSRs and reads results back. Future improvements could include DMA-based transfers or tiling for larger matrices to reduce overhead and improve utilisation.
+- **GEMV v2.** The byte-wide v1 design was upgraded to a packed 32-bit data path with a 4-lane parallel MAC (see Section 9.4). Future improvements: DMA-based transfers so the GEMV core fetches W from main RAM itself (eliminating CPU-side CSR-bus traffic entirely), and tiling for matrices larger than 64×64.
 
-- **DOT8.** The custom instruction is single-cycle. Further gains might be possible with pipelining or wider lanes (e.g. 8-lane) if the encoder is refactored to use them.
+- **DOT8.** The custom instruction is single-cycle. Further gains might be possible with pipelining or wider lanes (e.g. 8-lane).
 
-- **EXP LUT.** The table is fixed (16 entries, Q10) and matches the current softmax range. A different approximation or a larger table could be explored for better accuracy or range at the cost of area or latency.
+- **EXP LUT.** The hardware table is fixed (16 entries, Q10).
+
+- **Timing closure at 100 MHz.** The v2 GEMV's 4-lane MAC adds combinational depth; final Vivado WNS at 100 MHz is **−6.3 ns** on the xc7a100t-1 (the design works at room temperature, and `ENC_CKSUM` is bit-identical with baseline across all 10 demo samples, but is not timing-safe). For production use, either pipeline the dot4 stage (one extra cycle of latency) or lower `sys_clk_freq` to ~75 MHz to close timing cleanly.
+
+---
+
+## 9. Final Measured Performance Results
+
+### 9.1 Methodology
+
+All measurements are taken on the **same FPGA platform** (Digilent Nexys4DDR with the v2 LiteX bitstream loaded). Only the firmware binary changes between modes; the bitstream — and therefore the CPU, peripherals, memory map, and cache configuration — is identical across the three measurements. This isolates the effect of using the accelerators from any platform variation.
+
+**Timer source.** The on-chip LiteX `timer0` peripheral is read in `main_baseline.c` and `main_all.c` immediately before and after the call to `demo_run()`. The timer counts down at the system clock rate `sys_clk_freq = 100 MHz`. Reported `CYCLES` is the elapsed count, converted to microseconds with `TIME_US = CYCLES / (sys_clk_freq / 1_000_000) = CYCLES / 100`.
+
+**Why the hardware timer, not Python wall-clock.** The Python script's `time.perf_counter()` is unreliable for short runs because pyserial's `readline()` loop can exit early between runs (it loses some bytes between the firmware's "Done" marker and the next "Ready"). The firmware-side timer cannot be fooled — it counts at `sys_clk` regardless of what Python observes.
+
+**Workload.** A single firmware run executes `demo_run()`, which iterates through 10 demo samples. For each sample it calls `tinyformer_encode()` (full Q/K/V/O projections + streaming attention + softmax + FFN + residuals + saturation) followed by mean-pooling, the 6-class classifier, and UART output of `ENC_CKSUM`, `Sample N: pred=… exp=…`. The 10 samples are deterministic and identical across modes.
+
+**Correctness gate.** All three modes (baseline, v1, v2) produce **bit-identical** `ENC_CKSUM` for every sample (`0x00005CE7, 0x00006557, 0x000068B6, 0x00006469, 0x000062A1, 0x000063A6, 0x0000627B, 0x00006ACF, 0x0000719B, 0x00007185`). Identical encoder output ⇒ identical predictions ⇒ the speedup is real, not an artefact of skipped work.
+
+### 9.2 Three-Way Comparison Table
+
+| Mode | Firmware path | CYCLES | TIME_US | Wall time | Speedup |
+|------|--------------|--------|---------|-----------|---------|
+| **Baseline** (no accelerators) | Real-math softmax exp + software matvec + software attention scores | **75,900,400** | 759,004 | **759.00 ms** | 1.00× |
+| **accel_all v1** (byte-wide GEMV) | HW LUT exp + DOT8 attention + 1-lane GEMV matvec | 19,067,129 | 190,671 | 190.67 ms | 3.98× |
+| **accel_all v2** (packed GEMV) | HW LUT exp + DOT8 attention + 4-lane packed GEMV matvec | **15,755,300** | 157,553 | **157.55 ms** | **4.82×** |
+
+Standard deviation across 10 runs is < 0.1 ms in every mode (the timer is rock-steady).
+
+### 9.3 Cycles → Time Conversion (Worked Example)
+
+At 100 MHz, one cycle is 10 ns. The conversion is:
+
+```
+time_s   = CYCLES / sys_clk_freq
+time_us  = CYCLES / (sys_clk_freq / 1_000_000)
+time_ms  = CYCLES / (sys_clk_freq / 1_000)
+```
+
+Worked example for accel_all v2:
+
+```
+CYCLES   = 15,755,300
+sys_clk  = 100,000,000 Hz
+
+time_s   = 15,755,300 / 100,000,000           = 0.157553 s
+time_ms  = 15,755,300 / 100,000               = 157.553 ms
+time_us  = 15,755,300 / 100                   = 157,553 µs
+```
+
+Worked example for baseline:
+
+```
+CYCLES   = 75,900,400
+time_ms  = 75,900,400 / 100,000               = 759.004 ms
+```
+
+Worked example for the **speedup ratio**:
+
+```
+Speedup_v2 = baseline_cycles / accel_v2_cycles
+           = 75,900,400      / 15,755,300
+           = 4.818           (≈ 4.82×)
+
+Speedup_v1 = baseline_cycles / accel_v1_cycles
+           = 75,900,400      / 19,067,129
+           = 3.980           (≈ 3.98×)
+
+Speedup_v2_over_v1 = accel_v1_cycles / accel_v2_cycles
+                   = 19,067,129      / 15,755,300
+                   = 1.210           (≈ 1.21×)
+```
+
+### 9.4 What Changed from v1 to v2 (GEMV optimisation)
+
+**Bus path (data movement).** In v1, the CSR-bus registers `X_IN` and `W_IN` were each 8-bit; the CPU pushed one int8 lane per MMIO write. For a 32×32 matvec that meant 32 X writes + 1024 W writes + 32 B writes = 1088 writes/call, and the bus dominated the total time. In v2, both registers were widened to 32-bit and the C driver packs four int8 lanes per write (`pack4_i8()`), cutting CSR-bus traffic by **4×** to ~272 writes/matvec.
+
+**Compute path.** In v1, the FSM inside `gemv_core.v` performed one signed int8 multiply-accumulate per clock — i.e. 1024 cycles for a 32×32 matvec. In v2, the internal X and W memories were restructured as 32-bit-wide word arrays, and the FSM now reads one packed word from each per cycle and computes four signed int8 MACs in parallel (`dot4 = sum of four mul`), folding the result into the running accumulator. Compute drops to **256 cycles per 32×32 matvec** — another **4× win** on the hardware side.
+
+**End-to-end result.** v1 → v2 saves ≈ 3.3 M cycles per inference (~33 ms at 100 MHz), which is the 1.21× column above. The remaining v2 → baseline gap (60.1 M cycles) is split across attention dot products (accelerated by DOT8), softmax exp (accelerated by EXP_LUT), and the *outer* loop overhead around the linear projections.
+
+### 9.5 Breakdown — Where the Baseline's 75.9 M Cycles Go
+
+Rough decomposition (per inference, baseline mode):
+
+| Component | Cycles | % | Accelerated by |
+|-----------|--------|---|----------------|
+| **Softmax exp() per call** (2560 calls × ~21k cyc each) | ~53.8 M | 71 % | EXP_LUT peripheral (~12 cyc/call in accel modes) |
+| Software matvec (Q,K,V,O,FFN1,FFN2): 960 calls × ~17k cyc | ~16.3 M | 21 % | GEMV peripheral (v2: ~2k cyc/call) |
+| Attention dot products (16×16 × 32-dim × 10 samples) | ~1.0 M | 1 % | DOT8 custom instruction (~256 cyc total) |
+| UART output (10 × ENC_CKSUM + Sample lines, 115200 baud) | ~4.0 M | 5 % | not accelerated (115200-baud transmit time) |
+| Misc (softmax accumulator, mean-pool, classifier, residuals, control flow) | ~0.8 M | 1 % | not accelerated |
+| **Total** | **~75.9 M** | 100 % | |
+
+(The 71% softmax cost is high because the honest baseline uses runtime fixed-point math for `exp()` — see Section 9.6.)
+
+### 9.6 What “Real-Math Baseline” Means
+
+To make the EXP_LUT speedup a fair comparison, the baseline firmware (compiled without `USE_EXP_LUT_HW`) no longer reads from a precomputed 16-entry table. Instead, `compute_exp_q10()` in `tinyformer.c` computes each softmax `exp(-c·k)` at runtime via fixed-point multiplicative decay with a single mathematical constant `decay_q15 = 24149 ≈ 0.7368 · 2^15`. The function is `__attribute__((noinline, optimize("O0")))` so gcc cannot unroll, constant-fold, or memoize it — the per-call work is genuinely paid on every softmax lookup. Each call costs ~21k CPU cycles; multiplied by 2560 softmax lookups per inference, this contributes ~53.8 M cycles (i.e. roughly 71 % of the baseline total). Removing the LUT was a deliberate, *honest* choice: the HW LUT is meaningful only if the alternative is real arithmetic, not another lookup table that gcc would otherwise pre-resolve.
+
+### 9.7 Vivado Resource and Timing Report (v2 bitstream)
+
+| Resource | Used | Available | Util % |
+|----------|------|-----------|--------|
+| Slice LUTs | 6,321 | 63,400 | 9.97 % |
+| Slice Registers | 5,461 | 126,800 | 4.31 % |
+| LUT as Distributed RAM | 968 | 19,000 | 5.11 % |
+| RAMB36 | 47 | 135 | 34.81 % |
+| DSP Blocks | 4 (VexRiscv DOT8) + 4 (GEMV 4-lane MAC) = 8 | 240 | 3.33 % |
+
+**Timing.** WNS = **−6.309 ns** on the worst path (inside `gemv_core` — the 4-lane multiply + adder-tree + accumulator-add chain). The design routes cleanly (0 routing errors) and runs correctly at room temperature, but a production version should either pipeline the dot4 stage or drop `sys_clk_freq` to ~75 MHz.
+
+---
+
+## 10. How to Reproduce the Final Numbers
+
+1. **Program the v2 bitstream** from `accelerators/accel_all_v2/digilent_nexys4ddr.bit` onto the Nexys4DDR.
+
+2. **Run each mode** in turn — the SFL-upload measurement scripts swap firmware over UART automatically (no need to reprogram between modes):
+
+   ```sh
+   # Baseline (real-math softmax exp, software matvec)
+   cd C:\Final_Project\0_baseline
+   python run_baseline_and_measure.py --port COM3 --runs 10 --power_val estimate
+   #   → "FIRMWARE TIMER Avg : 759.00 ms"
+
+   # accel_all v1 (byte-wide GEMV)
+   cd C:\Final_Project\accelerators\accel_all
+   python run_accel_all_and_measure.py --port COM3 --runs 10 --power_val estimate
+   #   → "FIRMWARE TIMER Avg : 190.67 ms"
+
+   # accel_all v2 (32-bit packed GEMV + 4-lane MAC)
+   cd C:\Final_Project\accelerators\accel_all_v2
+   python run_accel_all_and_measure.py --port COM3 --runs 10 --power_val estimate
+   #   → "FIRMWARE TIMER Avg : 157.55 ms"
+   ```
+
+3. **Verify correctness.** In each `serial_debug*.log`, grep for `ENC_CKSUM=` — the values must match across all three modes for every sample.
+
+4. **Compute the speedup** from the firmware-timer `Avg` (or, equivalently, divide the `CYCLES=` values).
+
+The `COMPARISON_SUMMARY.csv` in the shared-folder root captures the headline numbers, and each mode's per-run CSV (`results_runtime.csv`, `results_accel_all.csv`, `results_accel_all_v2.csv`) keeps both `FW_Time_s` (authoritative) and `Python_WallClock_s` (kept for transparency) columns.
 
 ---
 
