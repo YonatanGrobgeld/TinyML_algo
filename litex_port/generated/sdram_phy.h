@@ -20,12 +20,12 @@
 #define SDRAM_PHY_XDR 2
 #define SDRAM_PHY_DATABITS 16
 #define SDRAM_PHY_DFI_DATABITS 32
-#define SDRAM_PHY_PHASES 4
+#define SDRAM_PHY_PHASES 2
 #define SDRAM_PHY_CL 3
 #define SDRAM_PHY_CWL 2
 #define SDRAM_PHY_CMD_LATENCY 0
 #define SDRAM_PHY_RDPHASE 1
-#define SDRAM_PHY_WRPHASE 2
+#define SDRAM_PHY_WRPHASE 0
 #define SDRAM_PHY_READ_LEVELING_CAPABLE
 #define SDRAM_PHY_DQ_DQS_RATIO 8
 #define SDRAM_PHY_MODULES 2
@@ -46,16 +46,6 @@ __attribute__((unused)) static inline void command_p1(int cmd)
 	sdram_dfii_pi1_command_write(cmd);
 	sdram_dfii_pi1_command_issue_write(1);
 }
-__attribute__((unused)) static inline void command_p2(int cmd)
-{
-	sdram_dfii_pi2_command_write(cmd);
-	sdram_dfii_pi2_command_issue_write(1);
-}
-__attribute__((unused)) static inline void command_p3(int cmd)
-{
-	sdram_dfii_pi3_command_write(cmd);
-	sdram_dfii_pi3_command_issue_write(1);
-}
 
 #define DFII_PIX_DATA_SIZE CSR_SDRAM_DFII_PI0_WRDATA_SIZE
 
@@ -64,8 +54,6 @@ static inline unsigned long sdram_dfii_pix_wrdata_addr(int phase)
 	switch (phase) {
 		case 0: return CSR_SDRAM_DFII_PI0_WRDATA_ADDR;
 		case 1: return CSR_SDRAM_DFII_PI1_WRDATA_ADDR;
-		case 2: return CSR_SDRAM_DFII_PI2_WRDATA_ADDR;
-		case 3: return CSR_SDRAM_DFII_PI3_WRDATA_ADDR;
 		default: return 0;
 	}
 }
@@ -74,8 +62,6 @@ static inline unsigned long sdram_dfii_pix_rddata_addr(int phase)
 	switch (phase) {
 		case 0: return CSR_SDRAM_DFII_PI0_RDDATA_ADDR;
 		case 1: return CSR_SDRAM_DFII_PI1_RDDATA_ADDR;
-		case 2: return CSR_SDRAM_DFII_PI2_RDDATA_ADDR;
-		case 3: return CSR_SDRAM_DFII_PI3_RDDATA_ADDR;
 		default: return 0;
 	}
 }
