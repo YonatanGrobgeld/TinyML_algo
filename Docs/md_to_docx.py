@@ -17,28 +17,27 @@ SRC = "/home/ronweinstein/workspace/university/Final_Project/TinyFormer_algo/Doc
 OUT = "/home/ronweinstein/workspace/university/Final_Project/TinyFormer_algo/Docs/Project_Report.docx"
 FIGDIR = "/home/ronweinstein/workspace/university/Final_Project/TinyFormer_algo/Docs/figures"
 
-PNG = {}
-for _n in (1, 2, 3, 4, 5, 7, 8):          # generated diagrams/charts (titles baked in)
-    _g = sorted(glob.glob(os.path.join(FIGDIR, f"Figure{_n}_*.png")))
-    if _g:
-        PNG[_n] = _g[0]
-# Figure 6 is the user-provided encoder architecture image (no baked figure title).
-PNG[6] = os.path.join(FIGDIR, "Figure6_Encoder_Architecture.jpeg")
-
-# Waveform screenshots (Figures 9-14) — raw captures, so their text caption IS shown.
 WAVEDIR = "/home/ronweinstein/workspace/university/Final_Project/TinyFormer_algo/Docs/waveforms"
-PNG.update({
-    9:  os.path.join(WAVEDIR, "GEMV_waveform/GEMV1.jpeg"),
-    10: os.path.join(WAVEDIR, "GEMV_waveform/GEMV2.jpeg"),
-    11: os.path.join(WAVEDIR, "GEMV_waveform/GEMV3.jpeg"),
-    12: os.path.join(WAVEDIR, "GEMV_waveform/GEMV4.jpeg"),
-    13: os.path.join(WAVEDIR, "LUT_waveform/LUT1.jpeg"),
-    14: os.path.join(WAVEDIR, "LUT_waveform/LUT2.jpeg"),
-})
-# Figures 1-5,7,8 have the "Figure N — title" baked into the rendered image, so we
-# suppress the duplicate text caption for those only. Figure 6 and the waveforms
-# (9-14) show their markdown caption.
-TITLE_BAKED = {1, 2, 3, 4, 5, 7, 8}
+# Document-order figure map (titles are carried by the Word captions, not the images).
+PNG = {
+    1:  os.path.join(FIGDIR, "Figure1_System_Block_Diagram.png"),
+    2:  os.path.join(FIGDIR, "Figure2_LiteX_SoC_Architecture.jpeg"),
+    3:  os.path.join(FIGDIR, "Figure3_DOT8_Pipeline.png"),
+    4:  os.path.join(FIGDIR, "Figure4_EXP_LUT_Interface.png"),
+    5:  os.path.join(FIGDIR, "Figure5_GEMV_Dataflow.png"),
+    6:  os.path.join(FIGDIR, "Figure6_Encoder_Architecture.jpeg"),
+    7:  os.path.join(WAVEDIR, "GEMV_waveform/GEMV1.jpeg"),
+    8:  os.path.join(WAVEDIR, "GEMV_waveform/GEMV2.jpeg"),
+    9:  os.path.join(WAVEDIR, "GEMV_waveform/GEMV3.jpeg"),
+    10: os.path.join(WAVEDIR, "GEMV_waveform/GEMV4.jpeg"),
+    11: os.path.join(WAVEDIR, "LUT_waveform/LUT1.jpeg"),
+    12: os.path.join(WAVEDIR, "LUT_waveform/LUT2.jpeg"),
+    13: os.path.join(FIGDIR, "Figure7_Baseline_Cycle_Breakdown.png"),
+    14: os.path.join(FIGDIR, "Figure8_Latency_Comparison.png"),
+}
+# Every figure now shows its markdown caption above the image (titles were removed
+# from the rendered images), so none are treated as "baked".
+TITLE_BAKED = set()
 
 # What each figure should become in the real document.
 FIG = {
@@ -293,6 +292,10 @@ while i < len(lines):
     p = doc.add_paragraph()
     add_runs(p, stripped)
     i += 1
+
+# Tell Word to rebuild fields (the Table of Contents) when the document is opened.
+_upd = OxmlElement("w:updateFields"); _upd.set(qn("w:val"), "true")
+doc.settings.element.append(_upd)
 
 doc.save(OUT)
 print("Saved", OUT)

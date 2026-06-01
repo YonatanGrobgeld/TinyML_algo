@@ -89,7 +89,8 @@ def elbow(ax, pts, color=EDGE, lw=1.6, label=None, lpos=None):
 
 
 def title(ax, W, H, txt):
-    ax.text(W / 2, H - 4, txt, ha="center", va="top", fontsize=15, weight="bold", color="#111111")
+    # Figure titles are now provided by the Word caption above each image.
+    return
 
 
 def save(fig, name):
@@ -99,24 +100,37 @@ def save(fig, name):
     print("wrote", name)
 
 
-# ============ Figure 1 — System block diagram ============
+# ============ Figure 1 — System architecture: baseline vs accelerated ============
+def _panel(ax, x0, w, header, cpu_txt, accel=False):
+    """Draw one SoC panel inside the figure starting at x0 with width w."""
+    container(ax, x0, 6, w, 80, header, fs=12)
+    cx = x0 + w / 2
+    cpu = box(ax, x0 + 6, 64, w - 12, 14, cpu_txt, "cpu", 9.5, bold=True)
+    bus = box(ax, x0 + 6, 50, w - 12, 8, "LiteX SoC Bus (Wishbone / CSR)", "bus", 9, bold=True)
+    arrow(ax, B(cpu), (cx, 58), bidir=True)
+    if accel:
+        lut = box(ax, x0 + 4, 34, (w - 12) / 2, 10, "EXP-LUT\n(MMIO)", "acc", 9)
+        gem = box(ax, x0 + 8 + (w - 12) / 2, 34, (w - 12) / 2, 10, "GEMV\n(MMIO)", "acc", 9)
+        ddr = box(ax, x0 + 4, 18, (w - 12) / 2, 9, "DDR2 SDRAM", "mem", 9)
+        ua  = box(ax, x0 + 8 + (w - 12) / 2, 18, (w - 12) / 2, 9, "UART", "io", 9)
+        for p in (lut, gem, ddr, ua):
+            arrow(ax, (C(p)[0], 50), T(p), bidir=True)
+        note = box(ax, x0 + 6, 8, w - 12, 7, "Softmax→EXP-LUT · matvec→GEMV · dot-prod→DOT8", "note", 7.5, dashed=True)
+    else:
+        ddr = box(ax, x0 + 4, 30, (w - 12) / 2, 10, "DDR2 SDRAM", "mem", 9)
+        ua  = box(ax, x0 + 8 + (w - 12) / 2, 30, (w - 12) / 2, 10, "UART", "io", 9)
+        for p in (ddr, ua):
+            arrow(ax, (C(p)[0], 50), T(p), bidir=True)
+        note = box(ax, x0 + 6, 14, w - 12, 9, "All compute in software\n(no accelerators)", "note", 8.5, dashed=True)
+
+
 def fig1():
-    W, H = 120, 84
-    fig, ax = canvas(12, 8.4, W, H)
-    title(ax, W, H, "Figure 1 — TinyFormer System Block Diagram")
-    container(ax, 6, 10, 108, 64, "Nexys4DDR FPGA  ·  Xilinx Artix-7 xc7a100t  ·  100 MHz")
-    cpu = box(ax, 12, 44, 30, 16, "VexRiscv\nRV32IM CPU\n+ DOT8 plugin", "cpu", 10, bold=True)
-    fw  = box(ax, 12, 20, 30, 18, "Firmware modes\n(compile-time):\nbaseline\naccel_all\n(DOT8 + EXP-LUT + GEMV)", "note", 8.5, dashed=True)
-    bus = box(ax, 54, 20, 12, 40, "LiteX\nSoC Bus\n(Wishbone\n/ CSR)", "bus", 8.5, bold=True)
-    lut = box(ax, 80, 50, 32, 11, "EXP-LUT (MMIO)\n16-entry Q10 ROM", "acc", 9.5)
-    gem = box(ax, 80, 37, 32, 11, "GEMV (MMIO)\n4-lane int8 MAC", "acc", 9.5)
-    ddr = box(ax, 80, 24, 32, 10, "DDR2 SDRAM\nfirmware + weights", "mem", 9.5)
-    ua  = box(ax, 80, 13, 32, 8,  "UART (115200 baud)", "io", 9.5)
-    ser = box(ax, 80, 1, 32, 8,   "Serial out:\nENC_CKSUM + class", "out", 9)
-    arrow(ax, R(cpu), L(bus), bidir=True)
-    for p in (lut, gem, ddr, ua):
-        arrow(ax, R(bus), L(p), bidir=True)
-    arrow(ax, B(ua), T(ser))
+    W, H = 150, 92
+    fig, ax = canvas(15, 9.2, W, H)
+    _panel(ax, 4, 68, "Baseline mode  ·  pure software",
+           "VexRiscv RV32IM CPU\n(unmodified)", accel=False)
+    _panel(ax, 80, 68, "accel_all mode  ·  HW-accelerated",
+           "VexRiscv RV32IM CPU\n+ DOT8 custom instruction", accel=True)
     save(fig, "Figure1_System_Block_Diagram.png")
 
 
@@ -251,8 +265,8 @@ def fig7():
         ax.text(p + 1.2, yi, f"{p}%  ({c} cyc)", va="center", ha="left", fontsize=10.5, weight="bold")
     ax.set_yticks(list(y)); ax.set_yticklabels(cats, fontsize=11)
     ax.set_xlim(0, 88); ax.set_xlabel("Share of baseline cycles (%)", fontsize=11)
-    ax.set_title("Figure 7 — Baseline Cycle Breakdown\n75.9 M cycles · 759 ms per inference",
-                 fontsize=14, weight="bold")
+    ax.set_title("Baseline cycle breakdown — 75.9 M cycles (759 ms) per inference",
+                 fontsize=13, weight="bold")
     ax.spines[["top", "right"]].set_visible(False)
     ax.xaxis.grid(True, ls=":", alpha=0.5); ax.set_axisbelow(True)
     save(fig, "Figure7_Baseline_Cycle_Breakdown.png")
@@ -271,7 +285,7 @@ def fig8():
         ax.text(b.get_x() + b.get_width() / 2, m / 2, s, ha="center", fontsize=13, weight="bold", color="#222222")
     ax.set_ylabel("Latency per inference (ms)", fontsize=11)
     ax.set_ylim(0, 840)
-    ax.set_title("Figure 8 — End-to-End Latency (lower is better)", fontsize=14, weight="bold")
+    ax.set_title("End-to-end latency per inference (lower is better)", fontsize=13, weight="bold")
     ax.spines[["top", "right"]].set_visible(False)
     ax.yaxis.grid(True, ls=":", alpha=0.5); ax.set_axisbelow(True)
     save(fig, "Figure8_Latency_Comparison.png")
@@ -302,6 +316,6 @@ def fig9():
     save(fig, "Figure9_GEMV_v1_v2_Cycles.png")
 
 
-for f in (fig1, fig2, fig3, fig4, fig5, fig7, fig8):
+for f in (fig1, fig3, fig4, fig5, fig7, fig8):
     f()
 print("done")

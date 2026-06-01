@@ -20,8 +20,8 @@
 - [Abstract](#abstract)
 - [1. Introduction](#1-introduction)
 - [2. Theoretical Background](#2-theoretical-background)
-- [3. Simulation](#3-simulation)
-- [4. Implementation](#4-implementation)
+- [3. Implementation](#3-implementation)
+- [4. Simulation](#4-simulation)
 - [5. Analysis of Results](#5-analysis-of-results)
 - [6. Conclusions and Further Work](#6-conclusions-and-further-work)
 - [7. Project Documentation](#7-project-documentation)
@@ -29,40 +29,36 @@
 - [Appendix A: LUT Table Values](#appendix-a-lut-table-values)
 - [Appendix B: GEMV CSR Register Map](#appendix-b-gemv-csr-register-map)
 
----
-
 ## List of Figures
 
-- Figure 1 — TinyFormer System Block Diagram
+- Figure 1 — System Architecture: Baseline vs. Accelerated Modes
 - Figure 2 — LiteX SoC Architecture
 - Figure 3 — DOT8 Custom Instruction Pipeline Integration
 - Figure 4 — EXP-LUT Peripheral Interface
 - Figure 5 — GEMV Peripheral Data-Flow
-- Figure 6 — TinyFormer Algorithm Pipeline
-- Figure 7 — Baseline Cycle Decomposition (per inference)
-- Figure 8 — Performance Comparison Graph
-- Figure 9 — GEMV Simulation: Full Operation Overview
-- Figure 10 — GEMV Simulation: Start Handshake
-- Figure 11 — GEMV Simulation: One Compute Row (4-lane MAC)
-- Figure 12 — GEMV Simulation: Completion and Result Read-back
-- Figure 13 — EXP-LUT Simulation: Full Index Sweep (Test 1)
-- Figure 14 — EXP-LUT Simulation: Stability Hold (Test 2)
+- Figure 6 — TinyFormer Encoder Architecture
+- Figure 7 — GEMV Simulation: Full Operation Overview
+- Figure 8 — GEMV Simulation: Start Handshake
+- Figure 9 — GEMV Simulation: One Compute Row (4-lane MAC)
+- Figure 10 — GEMV Simulation: Completion and Result Read-back
+- Figure 11 — EXP-LUT Simulation: Full Index Sweep (Test 1)
+- Figure 12 — EXP-LUT Simulation: Stability Hold (Test 2)
+- Figure 13 — Baseline Cycle Decomposition (per inference)
+- Figure 14 — Performance Comparison Graph
 
 ## List of Tables
 
 - Table 1 — TinyFormer Model Parameters
-- Table 2 — Per-Timestep Feature Vector Layout
-- Table 3 — RTL Simulation Test Scenarios
-- Table 4 — FPGA Resource Utilization and Power
-- Table 5 — Firmware Build Modes
-- Table 6 — Algorithm Operation Count per Stage
+- Table 2 — FPGA Resource Utilization and Power
+- Table 3 — Firmware Build Modes
+- Table 4 — Algorithm Operation Count per Stage
+- Table 5 — Per-Timestep Feature Vector Layout
+- Table 6 — RTL Simulation Test Scenarios
 - Table 7 — Baseline Cycle Decomposition
 - Table 8 — Performance Comparison
 - Table 9 — Per-Accelerator Cycle Savings
 - Table 10 — Correctness Checksums (All 10 Samples)
 - Table 11 — Project Goals vs. Achieved Results
-
----
 
 ## Abstract
 
@@ -76,7 +72,7 @@ A pure-software baseline measured at **75.9 million cycles (759 ms)** per infere
 
 The final combined system achieves a **4.82× end-to-end speedup** (759.00 ms → 157.55 ms). Bit-identical correctness is verified by a 32-bit additive checksum over the encoder's 16×32 int8 output for every inference, so model accuracy is unchanged by acceleration. Total LUT utilization is **10.04%** (up from 6.13% for the plain soft-core), leaving roughly 90% of the FPGA fabric free for future extensions. Power rises only modestly, from **0.740 W to 0.792 W** (1.07×, ≈7%) — a deliberate area/power-for-speed trade-off in exchange for the 4.82× gain.
 
-*Figure 1 — TinyFormer System Block Diagram*
+*Figure 1 — System Architecture: Baseline vs. Accelerated Modes*
 
 ```
   ┌──────────────────────────────────────────────────────────────────────┐
@@ -208,158 +204,9 @@ Several alternative algorithms and architectures were evaluated before settling 
 
 ---
 
-## 3. Simulation
+## 3. Implementation
 
-### 3.1 Python Training and Validation Pipeline
-
-Before any FPGA implementation, TinyFormer was trained and validated on a host machine using PyTorch. This pipeline serves as the algorithmic reference and provides the quantized weights used in firmware.
-
-**Dataset Preparation.** The UCI Human Activity Recognition (UCI HAR) dataset [5] contains inertial sensor recordings (body accelerometer and gyroscope) from 30 subjects performing 6 activities: walking, walking upstairs, walking downstairs, sitting, standing, and laying. Raw signals consist of 6 channels (acc x/y/z, gyro x/y/z) at 128 timesteps per sample. The preprocessing pipeline (`preprocess_uci_har.py`):
-
-- **Time downsampling:** Each 128-timestep signal is average-pooled in chunks of 8 down to 16 timesteps, matching TinyFormer's sequence length S=16.
-- **Feature engineering:** For each of the 16 timesteps, a 32-dimensional feature vector (matching D=32) is constructed from 14 engineered features, with the remaining 18 dimensions zero-padded. The feature layout is shown in Table 2.
-- **Normalization:** Per-feature z-score normalization is applied using mean and standard deviation computed over all training samples and timesteps; the same statistics are applied to the test set.
-- **Labels:** Original labels (1–6) are remapped to 0–5.
-
-The resulting dataset has shape (N, 16, 32). The 18 zero-padded dimensions are a deliberate design choice: they round the feature dimension up to D=32, which keeps it a multiple of 4 (required by the DOT8 4-lane packing and the GEMV 32-bit packed data path) and a power of two (simplifying the right-shift scaling).
-
-**Table 2 — Per-Timestep Feature Vector Layout (D = 32)**
-
-| Index | Feature | Source |
-|---|---|---|
-| 0–2 | ax, ay, az | Body accelerometer (downsampled) |
-| 3–5 | gx, gy, gz | Body gyroscope (downsampled) |
-| 6 | accel magnitude | √(ax²+ay²+az²) |
-| 7 | gyro magnitude | √(gx²+gy²+gz²) |
-| 8–10 | Δax, Δay, Δaz | First difference vs. previous timestep (0 at t=0) |
-| 11–13 | Δgx, Δgy, Δgz | First difference vs. previous timestep (0 at t=0) |
-| 14–31 | zero padding | — |
-
-**Training.** A TinyFormer encoder (S=16, D=32, FFN=64, 1 head) plus a linear classifier head (D=32 to 6 classes) is trained in PyTorch using cross-entropy loss and the Adam optimizer. The training script produces:
-- `artifacts/state_dict.pt` — encoder weights (W_q, W_k, W_v, W_o, W_ff1, W_ff2 and corresponding biases).
-- `artifacts/classifier.npz` — classifier head weights and biases.
-
-**Weight Export.** A dedicated export script (`tools/export_weights.py`) quantizes floating-point weights to int8 using symmetric per-tensor scaling and generates C source files (`trained_weights.c/h`, `demo_samples.c/h`, `demo_classifier.c/h`) in the row-major layout expected by the firmware. A fixed set of 10 test samples with ground-truth labels is embedded for on-device validation.
-
-**Software Reference.** The Python pipeline also serves as the numerical reference. The int8 C implementation in `tinyformer.c` is validated against Python-computed encoder outputs prior to hardware bring-up to confirm that quantization error is within the expected range.
-
-### 3.2 Model Accuracy and Quantization Quality
-
-Classification accuracy in this project originates entirely from the PyTorch training stage; the bare-metal C runtime only *executes* the exported network and does not train. Accuracy is therefore best reported in three stages, following the staged-reporting methodology used by KWT-Tiny [1]:
-
-1. **Float reference (PyTorch).** The encoder plus linear classifier head are trained with cross-entropy loss and Adam. The training script (`train_tinyformer_uci_har.py`) prints train and test accuracy each epoch; the test accuracy of the trained float model is the upper-bound reference. *(Measured value to be inserted from the final training run: test accuracy ≈ [__]%.)*
-
-2. **Quantized C path (int8).** Exporting weights and activations to int8 with symmetric per-tensor scaling and the fixed right-shift-by-7 requantization introduces a small, expected quantization loss relative to the float reference. This is the accuracy actually realized on the FPGA. The crude uniform shift-by-7 scaling (rather than per-channel scaling) is the dominant source of this gap and is noted as a candidate for future refinement (Section 6.2).
-
-3. **Accelerated path.** Because the correctness gate (Section 5.4) proves the encoder output is **bit-identical** between the baseline int8 path and every accelerated build, the accelerated path has **exactly** the same accuracy as the quantized C path — the accelerators introduce zero additional accuracy loss by construction. This is a key advantage over approaches that approximate transcendental functions in hardware: the EXP-LUT, DOT8, and GEMV blocks each reproduce the software result exactly, so acceleration is decoupled from quality.
-
-**On-device functional check.** Ten labelled samples (`demo_labels = {0,1,2,3,4,5,4,4,4,4}`, spanning all six activity classes) are embedded in firmware. The demo runner classifies each on-target and prints `pred`/`exp` per sample. Because predictions are bit-identical across all modes, this serves as a deterministic end-to-end functional check on hardware rather than a statistical accuracy estimate, which is established on the full held-out test set in PyTorch.
-
-### 3.3 RTL Simulation (Vivado xsim)
-
-Both MMIO peripherals were verified in standalone SystemVerilog simulation using Vivado 2025.2's xsim simulator before integration into the LiteX SoC. This two-stage verification strategy (standalone simulation, then in-system self-test) catches hardware bugs before they are obscured by SoC integration complexity.
-
-**GEMV Testbench (`tb_gemv.sv`).** Three test scenarios are exercised:
-
-**Table 3 — RTL Simulation Test Scenarios (GEMV)**
-
-| Scenario | Description | Pass Condition |
-|---|---|---|
-| Deterministic | Fixed 32×32 matrix and vector, known expected output | Y outputs match golden reference after DONE asserts |
-| Randomized | LCG-generated random matrix and vector pair | Results match software-model computed inside testbench |
-| Boundary | All elements set to INT8_MIN (−128) and INT8_MAX (+127) | Correct saturation and sign handling verified |
-
-Any mismatch triggers `$fatal`. A PASS message is printed on successful completion. The testbench also generates a VCD waveform file (`tb_gemv.vcd`) for manual timing inspection.
-
-**LUT Testbench (`tb_lut.sv`).** A full address sweep (indices 0–15) compares each output against a golden file (`expected_lut.mem`). The golden values are the Q10 fixed-point representations of exp(0) through exp(−15), matching the software LUT in `tinyformer.c` exactly. Any mismatch triggers `$fatal`.
-
-Simulations are invoked from the Vivado Tcl console:
-
-```tcl
-source run_gemv_xsim.tcl
-source run_lut_xsim.tcl
-```
-
-#### GEMV Simulation Waveforms
-
-The captures below were taken from the `tb_gemv` xsim run. Signals are grouped into Clock/Reset, the CPU-write Load phase, the Start handshake, the FSM state/pointers, the 4-lane MAC datapath, and the Result read-back, so that the full operation can be read top-to-bottom.
-
-**Figure 9 — GEMV simulation: full operation overview**
-
-```
-(waveform)
-```
-
-Figure 9 shows one complete matrix-vector operation end to end: reset, the three CPU load bursts (the long `x_wr_en` / `w_wr_en` / `b_wr_en` pulses as X, W, and the bias are streamed into the peripheral), the single `start` pulse, the autonomous compute phase (`state = 1`, `col` sweeping), and finally `done` with the result read-back. The key point is that the three load bursts dominate the timeline, but the CPU only "blocks" for the one-cycle `start` write — the compute phase then runs entirely inside the peripheral while the CPU is free.
-
-**Figure 10 — GEMV simulation: start handshake**
-
-```
-(waveform)
-```
-
-Figure 10 zooms into roughly six clock cycles around the kick-off. On the rising edge during the one-cycle `start` pulse the FSM samples it, `state` jumps `0 → 1` (IDLE → COMPUTE) and `busy` asserts; `start` then returns to 0. This is the single-cycle handshake: one CSR write places the peripheral in COMPUTE and the CPU is immediately released to do other work.
-
-**Figure 11 — GEMV simulation: one compute row (4-lane MAC)**
-
-```
-(waveform)
-```
-
-Figure 11 spans one full output row (~10 cycles). With `state = 1` and `row = 0` held, `col` increments `0 → 1 → … → 8`; on every clock `x_word` and `w_word` present a fresh pair of packed 32-bit operands, `dot4` produces a new signed value (four signed int8 multiplies plus the adder tree, in a single cycle), and `acc` accumulates monotonically. When `col` reaches 8, `y_mem[0]` is latched, `row` advances to 1, `col` resets, and `acc` reloads with `b[1]`. This is the heart of the packed 4-lane design: 32 multiplies are completed in 8 cycles, versus 32 cycles for a one-byte-per-cycle MAC. The full compute phase between `start` and `done` spans ≈290 cycles for a 32×32 matvec (the 256 multiply-accumulate cycles plus per-row bias-reload and bookkeeping).
-
-**Figure 12 — GEMV simulation: completion and result read-back**
-
-```
-(waveform)
-```
-
-Figure 12 shows the hand-off back to the CPU. `busy` deasserts and `state` moves `1 → 2` (COMPUTE → DONE); `done` latches high; a `clear_done` pulse then clears `done` and resets the read pointer. On each subsequent `y_rd_en` pulse, `y_rd_data` presents the next int32 result. For this deterministic stimulus the four outputs read out as −8, −6, −4, −2 (rows 0–3), which match the hand-computed software golden exactly — confirming the peripheral is bit-exact, not merely fast.
-
-#### EXP-LUT Simulation Waveforms
-
-The following captures are from the `tb_lut` xsim run, which verifies the exponential lookup peripheral against the golden table `expected_lut.mem`.
-
-**Figure 13 — EXP-LUT simulation: full index sweep (Test 1)**
-
-```
-(waveform)
-```
-
-Figure 13 drives `index` through every legal value `0 → 15`, one per clock, while `value` is sampled on the same cycle and checked against the golden table; the internal address `addr = index[3:0]` is shown beneath. Two properties are visible directly: (1) **zero-cycle, combinational behaviour** — every `index` transition is reflected in `value` on the same cycle, with no pipeline register, so a softmax exponent is available the moment the CPU writes the index; and (2) **monotonic decay** — the outputs descend smoothly from `0x0400 = 1024` (the Q10 representation of 1.0) at `index = 0` down to `0x000C = 12` (≈ 0.0117) at `index = 15`. These values match the software helper `compute_exp_q10()` in `tinyformer.c` bit-for-bit, so the EXP-LUT is a drop-in numerical replacement rather than an approximation. All 16 entries are covered in 16 cycles, and the console reports `ok swp idx=k` for every `k`.
-
-**Figure 14 — EXP-LUT simulation: stability hold (Test 2)**
-
-```
-(waveform)
-```
-
-Figure 14 drives four representative indices — `0, 4, 8, 15` — and holds each for five clock cycles, covering the high, mid, and low ends of the table:
-
-| index | value (hex / dec) | Q10 → float | Role in softmax |
-|---|---|---|---|
-| 0 | 0x0400 / 1024 | 1.0000 | weight when score is at the max (k = 0) |
-| 4 | 0x012E / 302 | 0.2949 | mid-range decay |
-| 8 | 0x005A / 90 | 0.0879 | small contribution |
-| 15 | 0x000C / 12 | 0.0117 | nearly negligible (largest spread) |
-
-Each plateau holds rock-steady for the full five cycles with no glitches (the LUT is a pure combinational ROM with no internal state), and every transition is an instantaneous step to the new entry. This confirms the accelerator delivers a usable softmax weight with zero latency: the CPU's only per-exponent cost is the two CSR transactions (write index, read value) — roughly 12 cycles, versus the ≈21,000-cycle software `exp()` it replaces. Across 2,560 softmax exponents per inference, the EXP-LUT accounts for ≈53.8 M of the cycles eliminated by `accel_all` — the single largest contributor to the 4.82× speedup.
-
-### 3.4 On-Target Self-Tests
-
-In addition to RTL simulation, each accelerator includes a dedicated on-target self-test that runs before any benchmarking:
-
-- **`tests_dot8.c`**: Compares DOT8 hardware output against the C reference for a set of packed test vectors. Prints "DOT8 PASS" on success.
-- **`tests_lut.c`**: Sweeps indices 0–15 and compares EXP-LUT hardware output against the golden table in `tinyformer.c`. Prints "LUT PASS" on success.
-- **`tests_gemv.c`**: Runs GEMV with known matrices and vectors (32×32 and 64×64 shapes, with and without bias) and checks results against a software reference computed on-target. Prints "GEMV self-test PASS" on success.
-
-The self-tests are designed so that they can run even when the corresponding hardware is absent (using software fallbacks where applicable), allowing SoC and toolchain validation before the hardware peripherals are enabled.
-
----
-
-## 4. Implementation
-
-### 4.1 Hardware Platform
+### 3.1 Hardware Platform
 
 The system runs on a Digilent Nexys4DDR board hosting a Xilinx Artix-7 xc7a100t FPGA. The LiteX SoC includes a VexRiscv RV32IM soft-core at 100 MHz, DDR2 SDRAM as main memory, a UART peripheral for serial output, and three custom accelerator blocks. The SoC bus fabric, memory map, and peripheral CSR layout are generated by the LiteX build system from Python source.
 
@@ -385,7 +232,7 @@ The system runs on a Digilent Nexys4DDR board hosting a Xilinx Artix-7 xc7a100t 
    └────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Hardware Accelerators
+### 3.2 Hardware Accelerators
 
 #### DOT8 — Custom VexRiscv Instruction
 
@@ -505,7 +352,7 @@ The GEMV peripheral uses a 32-bit packed data path with a 4-lane parallel MAC. B
 
 Resource and power figures are reported for both firmware configurations on the same xc7a100t bitstream at 100 MHz. The accelerators were measured against the plain-VexRiscv baseline.
 
-**Table 4 — FPGA Resource Utilization and Power (xc7a100t @ 100 MHz)**
+**Table 2 — FPGA Resource Utilization and Power (xc7a100t @ 100 MHz)**
 
 | Metric | Baseline | Accelerated | Change |
 |---|---|---|---|
@@ -518,13 +365,13 @@ The 8 DSP blocks in the accelerated build comprise 4 for the DOT8 multiplier arr
 
 **Timing.** The Vivado implementation reports WNS = −6.309 ns on the worst path inside `gemv_core.v` (the 4-lane multiply + adder-tree + accumulator-add chain). The design routes cleanly with zero routing errors and produces bit-identical encoder output across all test samples at room temperature. For a production deployment, the dot4 stage should be pipelined (adding one cycle of latency) or `sys_clk_freq` should be reduced to approximately 75 MHz to close timing cleanly.
 
-### 4.3 Software Description
+### 3.3 Software Description
 
 #### Firmware Architecture
 
 The firmware is organized as a set of shared common sources plus mode-specific main files. Both configurations share the same TinyFormer encoder implementation, and hardware paths are selected at compile time using feature macros. This report focuses on the two end-point configurations — the pure-software baseline and the fully-accelerated `accel_all` build.
 
-**Table 5 — Firmware Build Modes**
+**Table 3 — Firmware Build Modes**
 
 | Mode | Accelerators Active | Feature Macros |
 |---|---|---|
@@ -547,13 +394,13 @@ The encoder implements the full Transformer encoder pipeline in portable C with 
 
 4. **Two-layer FFN with residual:** W_ff1 (32→64) with ReLU activation, followed by W_ff2 (64→32), with the result added back via a second residual connection. Both layers use the GEMV peripheral in accelerated builds.
 
-**Figure 6 — TinyFormer Algorithm Pipeline**
+**Figure 6 — TinyFormer Encoder Architecture**
 
 ```
 (figure)
 ```
 
-**Table 6 — Algorithm Operation Count per Stage**
+**Table 4 — Algorithm Operation Count per Stage**
 
 | Stage | Matrices | Multiply-Accumulate Ops | Output Shape |
 |---|---|---|---|
@@ -587,13 +434,162 @@ The on-chip LiteX `timer0` peripheral is read before and after `demo_run()` to m
 
 ---
 
+## 4. Simulation
+
+### 4.1 Python Training and Validation Pipeline
+
+Before any FPGA implementation, TinyFormer was trained and validated on a host machine using PyTorch. This pipeline serves as the algorithmic reference and provides the quantized weights used in firmware.
+
+**Dataset Preparation.** The UCI Human Activity Recognition (UCI HAR) dataset [5] contains inertial sensor recordings (body accelerometer and gyroscope) from 30 subjects performing 6 activities: walking, walking upstairs, walking downstairs, sitting, standing, and laying. Raw signals consist of 6 channels (acc x/y/z, gyro x/y/z) at 128 timesteps per sample. The preprocessing pipeline (`preprocess_uci_har.py`):
+
+- **Time downsampling:** Each 128-timestep signal is average-pooled in chunks of 8 down to 16 timesteps, matching TinyFormer's sequence length S=16.
+- **Feature engineering:** For each of the 16 timesteps, a 32-dimensional feature vector (matching D=32) is constructed from 14 engineered features, with the remaining 18 dimensions zero-padded. The feature layout is shown in Table 5.
+- **Normalization:** Per-feature z-score normalization is applied using mean and standard deviation computed over all training samples and timesteps; the same statistics are applied to the test set.
+- **Labels:** Original labels (1–6) are remapped to 0–5.
+
+The resulting dataset has shape (N, 16, 32). The 18 zero-padded dimensions are a deliberate design choice: they round the feature dimension up to D=32, which keeps it a multiple of 4 (required by the DOT8 4-lane packing and the GEMV 32-bit packed data path) and a power of two (simplifying the right-shift scaling).
+
+**Table 5 — Per-Timestep Feature Vector Layout (D = 32)**
+
+| Index | Feature | Source |
+|---|---|---|
+| 0–2 | ax, ay, az | Body accelerometer (downsampled) |
+| 3–5 | gx, gy, gz | Body gyroscope (downsampled) |
+| 6 | accel magnitude | √(ax²+ay²+az²) |
+| 7 | gyro magnitude | √(gx²+gy²+gz²) |
+| 8–10 | Δax, Δay, Δaz | First difference vs. previous timestep (0 at t=0) |
+| 11–13 | Δgx, Δgy, Δgz | First difference vs. previous timestep (0 at t=0) |
+| 14–31 | zero padding | — |
+
+**Training.** A TinyFormer encoder (S=16, D=32, FFN=64, 1 head) plus a linear classifier head (D=32 to 6 classes) is trained in PyTorch using cross-entropy loss and the Adam optimizer. The training script produces:
+- `artifacts/state_dict.pt` — encoder weights (W_q, W_k, W_v, W_o, W_ff1, W_ff2 and corresponding biases).
+- `artifacts/classifier.npz` — classifier head weights and biases.
+
+**Weight Export.** A dedicated export script (`tools/export_weights.py`) quantizes floating-point weights to int8 using symmetric per-tensor scaling and generates C source files (`trained_weights.c/h`, `demo_samples.c/h`, `demo_classifier.c/h`) in the row-major layout expected by the firmware. A fixed set of 10 test samples with ground-truth labels is embedded for on-device validation.
+
+**Software Reference.** The Python pipeline also serves as the numerical reference. The int8 C implementation in `tinyformer.c` is validated against Python-computed encoder outputs prior to hardware bring-up to confirm that quantization error is within the expected range.
+
+### 4.2 Model Accuracy and Quantization Quality
+
+Classification accuracy in this project originates entirely from the PyTorch training stage; the bare-metal C runtime only *executes* the exported network and does not train. Accuracy is therefore best reported in three stages, following the staged-reporting methodology used by KWT-Tiny [1]:
+
+1. **Float reference (PyTorch).** The encoder plus linear classifier head are trained with cross-entropy loss and Adam. The training script (`train_tinyformer_uci_har.py`) prints train and test accuracy each epoch; the test accuracy of the trained float model is the upper-bound reference. *(Measured value to be inserted from the final training run: test accuracy ≈ [__]%.)*
+
+2. **Quantized C path (int8).** Exporting weights and activations to int8 with symmetric per-tensor scaling and the fixed right-shift-by-7 requantization introduces a small, expected quantization loss relative to the float reference. This is the accuracy actually realized on the FPGA. The crude uniform shift-by-7 scaling (rather than per-channel scaling) is the dominant source of this gap and is noted as a candidate for future refinement (Section 6.2).
+
+3. **Accelerated path.** Because the correctness gate (Section 5.4) proves the encoder output is **bit-identical** between the baseline int8 path and every accelerated build, the accelerated path has **exactly** the same accuracy as the quantized C path — the accelerators introduce zero additional accuracy loss by construction. This is a key advantage over approaches that approximate transcendental functions in hardware: the EXP-LUT, DOT8, and GEMV blocks each reproduce the software result exactly, so acceleration is decoupled from quality.
+
+**On-device functional check.** Ten labelled samples (`demo_labels = {0,1,2,3,4,5,4,4,4,4}`, spanning all six activity classes) are embedded in firmware. The demo runner classifies each on-target and prints `pred`/`exp` per sample. Because predictions are bit-identical across all modes, this serves as a deterministic end-to-end functional check on hardware rather than a statistical accuracy estimate, which is established on the full held-out test set in PyTorch.
+
+### 4.3 RTL Simulation (Vivado xsim)
+
+Both MMIO peripherals were verified in standalone SystemVerilog simulation using Vivado 2025.2's xsim simulator before integration into the LiteX SoC. This two-stage verification strategy (standalone simulation, then in-system self-test) catches hardware bugs before they are obscured by SoC integration complexity.
+
+**GEMV Testbench (`tb_gemv.sv`).** Three test scenarios are exercised:
+
+**Table 6 — RTL Simulation Test Scenarios (GEMV)**
+
+| Scenario | Description | Pass Condition |
+|---|---|---|
+| Deterministic | Fixed 32×32 matrix and vector, known expected output | Y outputs match golden reference after DONE asserts |
+| Randomized | LCG-generated random matrix and vector pair | Results match software-model computed inside testbench |
+| Boundary | All elements set to INT8_MIN (−128) and INT8_MAX (+127) | Correct saturation and sign handling verified |
+
+Any mismatch triggers `$fatal`. A PASS message is printed on successful completion. The testbench also generates a VCD waveform file (`tb_gemv.vcd`) for manual timing inspection.
+
+**LUT Testbench (`tb_lut.sv`).** A full address sweep (indices 0–15) compares each output against a golden file (`expected_lut.mem`). The golden values are the Q10 fixed-point representations of exp(0) through exp(−15), matching the software LUT in `tinyformer.c` exactly. Any mismatch triggers `$fatal`.
+
+Simulations are invoked from the Vivado Tcl console:
+
+```tcl
+source run_gemv_xsim.tcl
+source run_lut_xsim.tcl
+```
+
+#### GEMV Simulation Waveforms
+
+The captures below were taken from the `tb_gemv` xsim run. Signals are grouped into Clock/Reset, the CPU-write Load phase, the Start handshake, the FSM state/pointers, the 4-lane MAC datapath, and the Result read-back, so that the full operation can be read top-to-bottom.
+
+**Figure 7 — GEMV simulation: full operation overview**
+
+```
+(waveform)
+```
+
+Figure 7 shows one complete matrix-vector operation end to end: reset, the three CPU load bursts (the long `x_wr_en` / `w_wr_en` / `b_wr_en` pulses as X, W, and the bias are streamed into the peripheral), the single `start` pulse, the autonomous compute phase (`state = 1`, `col` sweeping), and finally `done` with the result read-back. The key point is that the three load bursts dominate the timeline, but the CPU only "blocks" for the one-cycle `start` write — the compute phase then runs entirely inside the peripheral while the CPU is free.
+
+**Figure 8 — GEMV simulation: start handshake**
+
+```
+(waveform)
+```
+
+Figure 8 zooms into roughly six clock cycles around the kick-off. On the rising edge during the one-cycle `start` pulse the FSM samples it, `state` jumps `0 → 1` (IDLE → COMPUTE) and `busy` asserts; `start` then returns to 0. This is the single-cycle handshake: one CSR write places the peripheral in COMPUTE and the CPU is immediately released to do other work.
+
+**Figure 9 — GEMV simulation: one compute row (4-lane MAC)**
+
+```
+(waveform)
+```
+
+Figure 9 spans one full output row (~10 cycles). With `state = 1` and `row = 0` held, `col` increments `0 → 1 → … → 8`; on every clock `x_word` and `w_word` present a fresh pair of packed 32-bit operands, `dot4` produces a new signed value (four signed int8 multiplies plus the adder tree, in a single cycle), and `acc` accumulates monotonically. When `col` reaches 8, `y_mem[0]` is latched, `row` advances to 1, `col` resets, and `acc` reloads with `b[1]`. This is the heart of the packed 4-lane design: 32 multiplies are completed in 8 cycles, versus 32 cycles for a one-byte-per-cycle MAC. The full compute phase between `start` and `done` spans ≈290 cycles for a 32×32 matvec (the 256 multiply-accumulate cycles plus per-row bias-reload and bookkeeping).
+
+**Figure 10 — GEMV simulation: completion and result read-back**
+
+```
+(waveform)
+```
+
+Figure 10 shows the hand-off back to the CPU. `busy` deasserts and `state` moves `1 → 2` (COMPUTE → DONE); `done` latches high; a `clear_done` pulse then clears `done` and resets the read pointer. On each subsequent `y_rd_en` pulse, `y_rd_data` presents the next int32 result. For this deterministic stimulus the four outputs read out as −8, −6, −4, −2 (rows 0–3), which match the hand-computed software golden exactly — confirming the peripheral is bit-exact, not merely fast.
+
+#### EXP-LUT Simulation Waveforms
+
+The following captures are from the `tb_lut` xsim run, which verifies the exponential lookup peripheral against the golden table `expected_lut.mem`.
+
+**Figure 11 — EXP-LUT simulation: full index sweep (Test 1)**
+
+```
+(waveform)
+```
+
+Figure 11 drives `index` through every legal value `0 → 15`, one per clock, while `value` is sampled on the same cycle and checked against the golden table; the internal address `addr = index[3:0]` is shown beneath. Two properties are visible directly: (1) **zero-cycle, combinational behaviour** — every `index` transition is reflected in `value` on the same cycle, with no pipeline register, so a softmax exponent is available the moment the CPU writes the index; and (2) **monotonic decay** — the outputs descend smoothly from `0x0400 = 1024` (the Q10 representation of 1.0) at `index = 0` down to `0x000C = 12` (≈ 0.0117) at `index = 15`. These values match the software helper `compute_exp_q10()` in `tinyformer.c` bit-for-bit, so the EXP-LUT is a drop-in numerical replacement rather than an approximation. All 16 entries are covered in 16 cycles, and the console reports `ok swp idx=k` for every `k`.
+
+**Figure 12 — EXP-LUT simulation: stability hold (Test 2)**
+
+```
+(waveform)
+```
+
+Figure 12 drives four representative indices — `0, 4, 8, 15` — and holds each for five clock cycles, covering the high, mid, and low ends of the table:
+
+| index | value (hex / dec) | Q10 → float | Role in softmax |
+|---|---|---|---|
+| 0 | 0x0400 / 1024 | 1.0000 | weight when score is at the max (k = 0) |
+| 4 | 0x012E / 302 | 0.2949 | mid-range decay |
+| 8 | 0x005A / 90 | 0.0879 | small contribution |
+| 15 | 0x000C / 12 | 0.0117 | nearly negligible (largest spread) |
+
+Each plateau holds rock-steady for the full five cycles with no glitches (the LUT is a pure combinational ROM with no internal state), and every transition is an instantaneous step to the new entry. This confirms the accelerator delivers a usable softmax weight with zero latency: the CPU's only per-exponent cost is the two CSR transactions (write index, read value) — roughly 12 cycles, versus the ≈21,000-cycle software `exp()` it replaces. Across 2,560 softmax exponents per inference, the EXP-LUT accounts for ≈53.8 M of the cycles eliminated by `accel_all` — the single largest contributor to the 4.82× speedup.
+
+### 4.4 On-Target Self-Tests
+
+In addition to RTL simulation, each accelerator includes a dedicated on-target self-test that runs before any benchmarking:
+
+- **`tests_dot8.c`**: Compares DOT8 hardware output against the C reference for a set of packed test vectors. Prints "DOT8 PASS" on success.
+- **`tests_lut.c`**: Sweeps indices 0–15 and compares EXP-LUT hardware output against the golden table in `tinyformer.c`. Prints "LUT PASS" on success.
+- **`tests_gemv.c`**: Runs GEMV with known matrices and vectors (32×32 and 64×64 shapes, with and without bias) and checks results against a software reference computed on-target. Prints "GEMV self-test PASS" on success.
+
+The self-tests are designed so that they can run even when the corresponding hardware is absent (using software fallbacks where applicable), allowing SoC and toolchain validation before the hardware peripherals are enabled.
+
+---
+
 ## 5. Analysis of Results
 
 ### 5.1 Baseline Profiling
 
 The baseline firmware (pure software, no accelerators, runtime fixed-point exp() computation) was measured at **75,900,400 cycles (759.00 ms)** per inference across 10 samples. The on-chip hardware timer is the authoritative measurement source; Python wall-clock timing is unreliable at this granularity due to pyserial buffering behavior.
 
-**Figure 7 — Baseline Cycle Decomposition (per inference)**
+**Figure 13 — Baseline Cycle Decomposition (per inference)**
 
 ```
   Softmax exp() — 2,560 calls     ████████████████████████████████████  71%
@@ -629,7 +625,7 @@ All measurements were taken on the same FPGA bitstream, with only the firmware b
 
 Speedup: 75,900,400 / 15,755,300 = **4.82×**
 
-**Figure 8 — Performance Comparison (ms per 10-sample inference)**
+**Figure 14 — Performance Comparison (ms per 10-sample inference)**
 
 ```
 (graph)
@@ -674,7 +670,7 @@ All 10 checksums match. Predicted classes also match the baseline for every samp
 
 ### 5.5 Area and Power
 
-Relative to a plain VexRiscv baseline, the three accelerators add **+3.9 percentage points of LUT** (6.13% → **10.04%**), **+1.8 percentage points of flip-flops** (2.49% → 4.32%), and **+3.3 percentage points of DSP** (0% → 3.3%). Measured power rises from **0.740 W to 0.792 W**, a factor of **1.07** (≈ 7%). The full breakdown is given in Table 4.
+Relative to a plain VexRiscv baseline, the three accelerators add **+3.9 percentage points of LUT** (6.13% → **10.04%**), **+1.8 percentage points of flip-flops** (2.49% → 4.32%), and **+3.3 percentage points of DSP** (0% → 3.3%). Measured power rises from **0.740 W to 0.792 W**, a factor of **1.07** (≈ 7%). The full breakdown is given in Table 2.
 
 It is worth being candid about the area and power outcome. Among the project's original goals was the aspiration to keep the design *below* 10% of the LUT fabric and to limit power growth. In practice, both area and power **increased modestly** — this is a fundamental trade-off of FPGA acceleration: dedicated arithmetic units and wider data paths consume logic and switch more, in exchange for fewer cycles. The design landed at 10.04% LUT — marginally over the sub-10% aspiration — and 1.07× power. Set against a **4.82× speedup**, this is a strongly favorable exchange: the system reaches a 157.55 ms target latency for only ~7% more power, and approximately **90% of the FPGA fabric remains free** for future extensions.
 
@@ -816,18 +812,26 @@ These values are defined identically in the hardware RTL (`exp_lut.sv`) and in t
 
 The register offsets below are representative; the actual byte addresses are auto-assigned by the LiteX CSR generator and exposed to firmware through `generated/csr.h`. Inside `gemv_core.v`, writes to X_IN, W_IN, and B_IN are presented to the core as the `x_wr_en`, `w_wr_en`, and `b_wr_en` strobes (each with auto-incrementing word index), while the CTRL bits drive `start`, `clear_done`, `len_64`, `out_dim_64`, and `bias_en`.
 
-| Offset | Register | R/W | Bits | Description |
+**Register map** (one row per register):
+
+| Offset | Register | R/W | Width | Description |
 |---|---|---|---|---|
-| 0x00 | CTRL | R/W | [0] start (pulse) | Write 1 to begin computation; self-clears |
-| | | | [1] busy (read-only) | 1 while FSM is active |
-| | | | [2] done (read-only) | 1 when computation is complete and Y is ready |
-| | | | [3] clear_done (pulse) | Write 1 to reset DONE and return FSM to IDLE |
-| | | | [4] len_64 | 0 = LEN=32; 1 = LEN=64 |
-| | | | [5] out_dim_64 | 0 = OUT_DIM=32; 1 = OUT_DIM=64 |
-| | | | [6] enable_bias | 1 = add bias vector b to result |
-| 0x04 | X_IN | W | [31:0] | Write packed int8 X elements (4 per word, little-endian) |
-| 0x08 | W_IN | W | [31:0] | Write packed int8 W elements (4 per word, row-major) |
-| 0x0C | B_IN | W | [31:0] | Write int32 bias element |
-| 0x10 | Y_OUT | R | [31:0] | Read int32 result element at current read pointer |
-| 0x14 | STATUS | R | [0] busy, [1] done | Mirror of CTRL status bits for polling |
-| 0x18 | Y_NEXT | W | [0] advance (pulse) | Write 1 to advance Y read pointer by one element |
+| 0x00 | CTRL | R/W | 32-bit | Control / status word — see the bit-field table below |
+| 0x04 | X_IN | W | 32-bit | Write packed int8 X elements (4 lanes per word, little-endian) |
+| 0x08 | W_IN | W | 32-bit | Write packed int8 W elements (4 lanes per word, row-major) |
+| 0x0C | B_IN | W | 32-bit | Write one int32 bias element |
+| 0x10 | Y_OUT | R | 32-bit | Read the int32 result element at the current read pointer |
+| 0x14 | STATUS | R | 32-bit | Status word: bit [0] busy, bit [1] done (for polling) |
+| 0x18 | Y_NEXT | W | 32-bit | Write 1 to advance the Y read pointer by one element |
+
+**CTRL bit-field** (offset 0x00):
+
+| Bit | Name | R/W | Description |
+|---|---|---|---|
+| 0 | start | W (pulse) | Write 1 to begin computation; self-clears |
+| 1 | busy | R | 1 while the FSM is active |
+| 2 | done | R | 1 when computation is complete and Y is ready |
+| 3 | clear_done | W (pulse) | Write 1 to reset DONE and return the FSM to IDLE |
+| 4 | len_64 | W | 0 = LEN 32; 1 = LEN 64 |
+| 5 | out_dim_64 | W | 0 = OUT_DIM 32; 1 = OUT_DIM 64 |
+| 6 | enable_bias | W | 1 = add the bias vector b to the result |
