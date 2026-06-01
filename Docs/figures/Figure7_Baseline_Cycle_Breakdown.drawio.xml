@@ -1,0 +1,46 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="Figure 7 - Baseline Breakdown" id="fig7">
+    <mxGraphModel dx="900" dy="650" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="820" pageHeight="380" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Figure 7 — Baseline Cycle Breakdown (75.9 M cycles / 759 ms per inference)" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="820" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl0" value="Softmax exp()" style="text;html=1;align=right;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="bar0" value="71%" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="250" y="80" width="355" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl1" value="Matrix-vector mult." style="text;html=1;align=right;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="125" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="bar1" value="21%" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="250" y="125" width="105" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl2" value="UART output" style="text;html=1;align=right;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="170" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="bar2" value="5%" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="250" y="170" width="25" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl3" value="Attention dot products" style="text;html=1;align=right;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="215" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="bar3" value="1%" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="250" y="215" width="6" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl4" value="Misc (residual/pool/cls)" style="text;html=1;align=right;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="260" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="bar4" value="2%" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="250" y="260" width="10" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="axis" value="" style="endArrow=none;html=1;strokeColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="250" y="70" width="1" height="235" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

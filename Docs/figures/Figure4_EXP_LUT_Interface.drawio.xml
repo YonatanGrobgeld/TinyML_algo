@@ -1,0 +1,37 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="Figure 4 - EXP-LUT Interface" id="fig4">
+    <mxGraphModel dx="900" dy="650" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="760" pageHeight="470" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Figure 4 — EXP-LUT Peripheral Interface" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="820" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="cpu" value="CPU / firmware&#10;(softmax)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="180" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="idx" value="index CSR&#10;write idx (0..15)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="330" y="110" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rom" value="16-entry Q10 exp() ROM&#10;lut[ index[3:0] ]  (combinational)&#10;1024, 754, 556, ..., 12" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="330" y="210" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="val" value="value CSR&#10;read Q10 value [15:0]" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="330" y="350" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="write index (0..15)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="cpu" target="idx">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="addr = index[3:0]" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="idx" target="rom">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="Q10 value" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="rom" target="val">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="read value (~12 cyc)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="val" target="cpu">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

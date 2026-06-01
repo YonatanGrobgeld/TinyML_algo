@@ -1,0 +1,40 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="Figure 9 - GEMV v1 vs v2" id="fig9">
+    <mxGraphModel dx="900" dy="650" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="760" pageHeight="580" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Figure 9 — GEMV v1 → v2 Cycle Reduction (per inference)" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="820" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="bar0" value="" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="200" y="120" width="130" height="320" as="geometry" />
+        </mxCell>
+        <mxCell id="val0" value="19.07 M" style="text;html=1;align=center;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="200" y="90" width="130" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl0" value="accel_all v1&#10;19.07 M cyc&#10;3.98×" style="text;html=1;align=center;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="200" y="450" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="bar1" value="" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="430" y="176" width="130" height="264" as="geometry" />
+        </mxCell>
+        <mxCell id="val1" value="15.76 M" style="text;html=1;align=center;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="146" width="130" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl1" value="accel_all v2&#10;15.76 M cyc&#10;4.82×" style="text;html=1;align=center;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="430" y="450" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="note" value="≈ 3.3 M cycles saved by the&#10;4-lane packed-CSR GEMV upgrade" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;dashed=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="470" y="150" width="230" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="yaxis" value="" style="endArrow=none;html=1;strokeColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="160" y="100" width="1" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="xaxis" value="" style="endArrow=none;html=1;strokeColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="160" y="440" width="480" height="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

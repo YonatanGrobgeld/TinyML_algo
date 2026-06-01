@@ -1,0 +1,64 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="Figure 6 - Encoder Pipeline" id="fig6">
+    <mxGraphModel dx="900" dy="650" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="800" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Figure 6 — TinyFormer Encoder Pipeline" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="820" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="input" value="Input X  [16×32]" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="300" y="70" width="300" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="qkv" value="Q/K/V Linear Projections&#10;W_q, W_k, W_v  (int8, ≫7)  [GEMV]" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="300" y="150" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="attn" value="Scaled Dot-Product Attention (streaming)&#10;scores ≫5 → softmax [EXP-LUT] → Σ wᵢⱼ·V" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="300" y="260" width="300" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="oproj" value="Output Projection W_o  [GEMV]&#10;+ residual  (X + ·)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="300" y="390" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="ffn1" value="FFN layer 1: W_ff1 [32→64] + ReLU  [GEMV]" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="300" y="490" width="300" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ffn2" value="FFN layer 2: W_ff2 [64→32]  [GEMV]&#10;+ residual" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="300" y="580" width="300" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="output" value="Output  [16×32]" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="300" y="680" width="300" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="f0" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="input" target="qkv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="qkv" target="attn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="attn" target="oproj">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="oproj" target="ffn1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="ffn1" target="ffn2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#333333;endArrow=classic;endFill=1;startArrow=none;" edge="1" parent="1" source="ffn2" target="output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n_dot8" value="DOT8&#10;accelerates the&#10;attention dot products" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;dashed=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="60" y="250" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="n_lut" value="EXP-LUT&#10;replaces the runtime&#10;softmax exp()" style="rounded=0;whiteSpace=wrap;html=1;fontSize=11;dashed=1;align=left;verticalAlign=top;fillColor=#ffffff;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="640" y="250" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="an1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#999999;dashed=1;endArrow=open;startArrow=none;" edge="1" parent="1" source="n_dot8" target="attn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="an2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#999999;dashed=1;endArrow=open;startArrow=none;" edge="1" parent="1" source="n_lut" target="attn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
