@@ -24,7 +24,7 @@ PNG = {
     2:  os.path.join(FIGDIR, "Figure2_LiteX_SoC_Architecture.jpeg"),
     3:  os.path.join(FIGDIR, "Figure3_DOT8_Pipeline.png"),
     4:  os.path.join(FIGDIR, "Figure4_EXP_LUT_Interface.png"),
-    5:  os.path.join(FIGDIR, "Figure5_GEMV_Dataflow.png"),
+    5:  os.path.join(FIGDIR, "Figure5_GEMV_Dataflow.jpeg"),
     6:  os.path.join(FIGDIR, "Figure6_Encoder_Architecture.jpeg"),
     7:  os.path.join(WAVEDIR, "GEMV_waveform/GEMV1.jpeg"),
     8:  os.path.join(WAVEDIR, "GEMV_waveform/GEMV2.jpeg"),
@@ -154,7 +154,7 @@ def add_image(num):
     with Image.open(path) as im:
         w, h = im.size
     aspect = w / h
-    maxw, maxh = 6.3, 7.2          # inches, fits within page text area
+    maxw, maxh = 5.6, 6.0          # inches, fits within page text area
     width = maxw if maxw / aspect <= maxh else maxh * aspect
     p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.add_run().add_picture(path, width=Inches(width))
@@ -167,7 +167,7 @@ def add_toc():
     run = p.add_run()
     f1 = OxmlElement("w:fldChar"); f1.set(qn("w:fldCharType"), "begin")
     instr = OxmlElement("w:instrText"); instr.set(qn("xml:space"), "preserve")
-    instr.text = 'TOC \\o "1-3" \\h \\z \\u'
+    instr.text = 'TOC \\o "1-2" \\h \\z \\u'
     f2 = OxmlElement("w:fldChar"); f2.set(qn("w:fldCharType"), "separate")
     t = OxmlElement("w:t"); t.text = "Right-click here and choose 'Update Field' to build the Table of Contents."
     f3 = OxmlElement("w:fldChar"); f3.set(qn("w:fldCharType"), "end")

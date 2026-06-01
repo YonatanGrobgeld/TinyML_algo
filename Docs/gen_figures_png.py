@@ -316,6 +316,6 @@ def fig9():
     save(fig, "Figure9_GEMV_v1_v2_Cycles.png")
 
 
-for f in (fig1, fig3, fig4, fig5, fig7, fig8):
+for f in (fig1, fig3, fig4, fig7, fig8):
     f()
 print("done")
