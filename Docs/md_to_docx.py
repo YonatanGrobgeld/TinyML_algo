@@ -79,6 +79,58 @@ doc = Document()
 normal = doc.styles["Normal"]
 normal.font.name = "Calibri"
 normal.font.size = Pt(11)
+# Compact spacing so the report stays near the ~25-page target.
+_npf = normal.paragraph_format
+_npf.space_before = Pt(0)
+_npf.space_after = Pt(4)
+_npf.line_spacing = 1.05
+
+# --- Title page (mirrors Template4ProjectReport.docx cover layout) ---
+COVER = {
+    "title": "TinyFormer: Hardware-Accelerated Transformer Inference on FPGA",
+    "project_no": "[Project Number]",
+    "report_type": "Final Project Report",
+    "students": [("Ron Weinstein", "[ID]"), ("Yehonatan Grobgeld", "[ID]")],
+    "supervisor": "Oren Ganon",
+    "institution": "Faculty of Engineering, Tel Aviv University",
+    "date": "June 2026",
+}
+
+
+def _center(text, size=11, bold=False, before=0, after=6, italic=False):
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    pf = p.paragraph_format
+    pf.space_before = Pt(before)
+    pf.space_after = Pt(after)
+    r = p.add_run(text)
+    r.bold = bold
+    r.italic = italic
+    r.font.size = Pt(size)
+    return p
+
+
+def build_cover():
+    # vertical lead so the block sits in the upper-middle of the page
+    for _ in range(3):
+        doc.add_paragraph()
+    _center(COVER["title"], size=22, bold=True, after=18)
+    _center(f"Project No. {COVER['project_no']}", size=13, after=4)
+    _center(COVER["report_type"], size=15, bold=True, after=28)
+
+    _center("Submitted by:", size=12, bold=True, after=4)
+    for name, sid in COVER["students"]:
+        _center(f"{name}   —   {sid}", size=12, after=2)
+
+    _center("Supervisor:", size=12, bold=True, before=18, after=4)
+    _center(COVER["supervisor"], size=12, after=2)
+
+    _center("Project carried out at:", size=12, bold=True, before=18, after=4)
+    _center(COVER["institution"], size=12, after=2)
+
+    _center(COVER["date"], size=12, before=28)
+    doc.add_page_break()
+
 
 INLINE = re.compile(r"(\*\*.+?\*\*|`[^`]+?`)")
 
@@ -154,7 +206,7 @@ def add_image(num):
     with Image.open(path) as im:
         w, h = im.size
     aspect = w / h
-    maxw, maxh = 5.6, 6.0          # inches, fits within page text area
+    maxw, maxh = 5.2, 4.2          # inches; smaller cap packs figures tighter
     width = maxw if maxw / aspect <= maxh else maxh * aspect
     p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.add_run().add_picture(path, width=Inches(width))
@@ -185,7 +237,9 @@ with open(SRC, encoding="utf-8") as fh:
 i = 0
 pending_fig = None
 first_title_done = False
-PAGEBREAK_BEFORE = {"Table of Contents", "Abstract"}
+skip_cover_table = False
+# Cover handles the cover->TOC break; only Abstract needs an explicit break.
+PAGEBREAK_BEFORE = {"Abstract"}
 
 while i < len(lines):
     line = lines[i]
@@ -206,9 +260,9 @@ while i < len(lines):
     if hm:
         hashes, htext = hm.group(1), hm.group(2).strip()
         if len(hashes) == 1 and not first_title_done:
-            t = doc.add_heading(htext, level=0)
-            t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            build_cover()
             first_title_done = True
+            skip_cover_table = True
         else:
             if htext in PAGEBREAK_BEFORE:
                 doc.add_page_break()
@@ -266,6 +320,10 @@ while i < len(lines):
             if not all(SEP.match(c) or c == "" for c in cells) or not any(SEP.match(c) for c in cells):
                 rows.append(cells)
             i += 1
+        # The markdown cover table is now rendered by build_cover(); skip it.
+        if skip_cover_table:
+            skip_cover_table = False
+            continue
         add_table(rows)
         continue
 
