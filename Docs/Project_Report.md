@@ -40,14 +40,13 @@
 - Figure 5 — GEMV Peripheral Data-Flow
 - Figure 6 — TinyFormer Algorithm Pipeline
 - Figure 7 — Baseline Cycle Decomposition (per inference)
-- Figure 8 — Three-Way Performance Comparison Graph
-- Figure 9 — GEMV v1 vs. v2 Cycle Comparison
-- Figure 10 — GEMV Simulation: Full Operation Overview
-- Figure 11 — GEMV Simulation: Start Handshake
-- Figure 12 — GEMV Simulation: One Compute Row (4-lane MAC)
-- Figure 13 — GEMV Simulation: Completion and Result Read-back
-- Figure 14 — EXP-LUT Simulation: Full Index Sweep (Test 1)
-- Figure 15 — EXP-LUT Simulation: Stability Hold (Test 2)
+- Figure 8 — Performance Comparison Graph
+- Figure 9 — GEMV Simulation: Full Operation Overview
+- Figure 10 — GEMV Simulation: Start Handshake
+- Figure 11 — GEMV Simulation: One Compute Row (4-lane MAC)
+- Figure 12 — GEMV Simulation: Completion and Result Read-back
+- Figure 13 — EXP-LUT Simulation: Full Index Sweep (Test 1)
+- Figure 14 — EXP-LUT Simulation: Stability Hold (Test 2)
 
 ## List of Tables
 
@@ -58,7 +57,7 @@
 - Table 5 — Firmware Build Modes
 - Table 6 — Algorithm Operation Count per Stage
 - Table 7 — Baseline Cycle Decomposition
-- Table 8 — Three-Way Performance Comparison
+- Table 8 — Performance Comparison
 - Table 9 — Per-Accelerator Cycle Savings
 - Table 10 — Correctness Checksums (All 10 Samples)
 - Table 11 — Project Goals vs. Achieved Results
@@ -89,10 +88,10 @@ The final combined system achieves a **4.82× end-to-end speedup** (759.00 ms �
   │  │                        │     │  ┌──────────┐  ┌──────────────┐  │ │
   │  │  Firmware modes:       │     │  │  EXP-LUT │  │     GEMV     │  │ │
   │  │  - baseline            │     │  │ (MMIO)   │  │   (MMIO)     │  │ │
-  │  │  - accel_dot8          │◄───►│  │ 16 Q10   │  │  4-lane MAC  │  │ │
-  │  │  - accel_lut           │     │  │ entries  │  │  32/64-dim   │  │ │
-  │  │  - accel_gemv          │     │  └──────────┘  └──────────────┘  │ │
-  │  │  - accel_all           │     │                                  │ │
+  │  │  - accel_all           │◄───►│  │ 16 Q10   │  │  4-lane MAC  │  │ │
+  │  │    (DOT8 + EXP-LUT     │     │  │ entries  │  │  32/64-dim   │  │ │
+  │  │     + GEMV)            │     │  └──────────┘  └──────────────┘  │ │
+  │  │                        │     │                                  │ │
   │  └───────────┬────────────┘     └──────────────────────────────────┘ │
   │              │                                                        │
   │  ┌───────────▼────────────┐     ┌──────────────────────────────────┐ │
@@ -285,57 +284,57 @@ source run_lut_xsim.tcl
 
 The captures below were taken from the `tb_gemv` xsim run. Signals are grouped into Clock/Reset, the CPU-write Load phase, the Start handshake, the FSM state/pointers, the 4-lane MAC datapath, and the Result read-back, so that the full operation can be read top-to-bottom.
 
-**Figure 10 — GEMV simulation: full operation overview**
+**Figure 9 — GEMV simulation: full operation overview**
 
 ```
 (waveform)
 ```
 
-Figure 10 shows one complete matrix-vector operation end to end: reset, the three CPU load bursts (the long `x_wr_en` / `w_wr_en` / `b_wr_en` pulses as X, W, and the bias are streamed into the peripheral), the single `start` pulse, the autonomous compute phase (`state = 1`, `col` sweeping), and finally `done` with the result read-back. The key point is that the three load bursts dominate the timeline, but the CPU only "blocks" for the one-cycle `start` write — the compute phase then runs entirely inside the peripheral while the CPU is free.
+Figure 9 shows one complete matrix-vector operation end to end: reset, the three CPU load bursts (the long `x_wr_en` / `w_wr_en` / `b_wr_en` pulses as X, W, and the bias are streamed into the peripheral), the single `start` pulse, the autonomous compute phase (`state = 1`, `col` sweeping), and finally `done` with the result read-back. The key point is that the three load bursts dominate the timeline, but the CPU only "blocks" for the one-cycle `start` write — the compute phase then runs entirely inside the peripheral while the CPU is free.
 
-**Figure 11 — GEMV simulation: start handshake**
-
-```
-(waveform)
-```
-
-Figure 11 zooms into roughly six clock cycles around the kick-off. On the rising edge during the one-cycle `start` pulse the FSM samples it, `state` jumps `0 → 1` (IDLE → COMPUTE) and `busy` asserts; `start` then returns to 0. This is the single-cycle handshake: one CSR write places the peripheral in COMPUTE and the CPU is immediately released to do other work.
-
-**Figure 12 — GEMV simulation: one compute row (4-lane MAC)**
+**Figure 10 — GEMV simulation: start handshake**
 
 ```
 (waveform)
 ```
 
-Figure 12 spans one full output row (~10 cycles). With `state = 1` and `row = 0` held, `col` increments `0 → 1 → … → 8`; on every clock `x_word` and `w_word` present a fresh pair of packed 32-bit operands, `dot4` produces a new signed value (four signed int8 multiplies plus the adder tree, in a single cycle), and `acc` accumulates monotonically. When `col` reaches 8, `y_mem[0]` is latched, `row` advances to 1, `col` resets, and `acc` reloads with `b[1]`. This is the heart of the v2 design: 32 multiplies are completed in 8 cycles versus 32 cycles in the byte-wide v1. The full compute phase between `start` and `done` spans ≈290 cycles for a 32×32 matvec (the 256 multiply-accumulate cycles plus per-row bias-reload and bookkeeping).
+Figure 10 zooms into roughly six clock cycles around the kick-off. On the rising edge during the one-cycle `start` pulse the FSM samples it, `state` jumps `0 → 1` (IDLE → COMPUTE) and `busy` asserts; `start` then returns to 0. This is the single-cycle handshake: one CSR write places the peripheral in COMPUTE and the CPU is immediately released to do other work.
 
-**Figure 13 — GEMV simulation: completion and result read-back**
+**Figure 11 — GEMV simulation: one compute row (4-lane MAC)**
 
 ```
 (waveform)
 ```
 
-Figure 13 shows the hand-off back to the CPU. `busy` deasserts and `state` moves `1 → 2` (COMPUTE → DONE); `done` latches high; a `clear_done` pulse then clears `done` and resets the read pointer. On each subsequent `y_rd_en` pulse, `y_rd_data` presents the next int32 result. For this deterministic stimulus the four outputs read out as −8, −6, −4, −2 (rows 0–3), which match the hand-computed software golden exactly — confirming the peripheral is bit-exact, not merely fast.
+Figure 11 spans one full output row (~10 cycles). With `state = 1` and `row = 0` held, `col` increments `0 → 1 → … → 8`; on every clock `x_word` and `w_word` present a fresh pair of packed 32-bit operands, `dot4` produces a new signed value (four signed int8 multiplies plus the adder tree, in a single cycle), and `acc` accumulates monotonically. When `col` reaches 8, `y_mem[0]` is latched, `row` advances to 1, `col` resets, and `acc` reloads with `b[1]`. This is the heart of the packed 4-lane design: 32 multiplies are completed in 8 cycles, versus 32 cycles for a one-byte-per-cycle MAC. The full compute phase between `start` and `done` spans ≈290 cycles for a 32×32 matvec (the 256 multiply-accumulate cycles plus per-row bias-reload and bookkeeping).
+
+**Figure 12 — GEMV simulation: completion and result read-back**
+
+```
+(waveform)
+```
+
+Figure 12 shows the hand-off back to the CPU. `busy` deasserts and `state` moves `1 → 2` (COMPUTE → DONE); `done` latches high; a `clear_done` pulse then clears `done` and resets the read pointer. On each subsequent `y_rd_en` pulse, `y_rd_data` presents the next int32 result. For this deterministic stimulus the four outputs read out as −8, −6, −4, −2 (rows 0–3), which match the hand-computed software golden exactly — confirming the peripheral is bit-exact, not merely fast.
 
 #### EXP-LUT Simulation Waveforms
 
 The following captures are from the `tb_lut` xsim run, which verifies the exponential lookup peripheral against the golden table `expected_lut.mem`.
 
-**Figure 14 — EXP-LUT simulation: full index sweep (Test 1)**
+**Figure 13 — EXP-LUT simulation: full index sweep (Test 1)**
 
 ```
 (waveform)
 ```
 
-Figure 14 drives `index` through every legal value `0 → 15`, one per clock, while `value` is sampled on the same cycle and checked against the golden table; the internal address `addr = index[3:0]` is shown beneath. Two properties are visible directly: (1) **zero-cycle, combinational behaviour** — every `index` transition is reflected in `value` on the same cycle, with no pipeline register, so a softmax exponent is available the moment the CPU writes the index; and (2) **monotonic decay** — the outputs descend smoothly from `0x0400 = 1024` (the Q10 representation of 1.0) at `index = 0` down to `0x000C = 12` (≈ 0.0117) at `index = 15`. These values match the software helper `compute_exp_q10()` in `tinyformer.c` bit-for-bit, so the EXP-LUT is a drop-in numerical replacement rather than an approximation. All 16 entries are covered in 16 cycles, and the console reports `ok swp idx=k` for every `k`.
+Figure 13 drives `index` through every legal value `0 → 15`, one per clock, while `value` is sampled on the same cycle and checked against the golden table; the internal address `addr = index[3:0]` is shown beneath. Two properties are visible directly: (1) **zero-cycle, combinational behaviour** — every `index` transition is reflected in `value` on the same cycle, with no pipeline register, so a softmax exponent is available the moment the CPU writes the index; and (2) **monotonic decay** — the outputs descend smoothly from `0x0400 = 1024` (the Q10 representation of 1.0) at `index = 0` down to `0x000C = 12` (≈ 0.0117) at `index = 15`. These values match the software helper `compute_exp_q10()` in `tinyformer.c` bit-for-bit, so the EXP-LUT is a drop-in numerical replacement rather than an approximation. All 16 entries are covered in 16 cycles, and the console reports `ok swp idx=k` for every `k`.
 
-**Figure 15 — EXP-LUT simulation: stability hold (Test 2)**
+**Figure 14 — EXP-LUT simulation: stability hold (Test 2)**
 
 ```
 (waveform)
 ```
 
-Figure 15 drives four representative indices — `0, 4, 8, 15` — and holds each for five clock cycles, covering the high, mid, and low ends of the table:
+Figure 14 drives four representative indices — `0, 4, 8, 15` — and holds each for five clock cycles, covering the high, mid, and low ends of the table:
 
 | index | value (hex / dec) | Q10 → float | Role in softmax |
 |---|---|---|---|
@@ -459,11 +458,9 @@ The EXP-LUT peripheral (`exp_lut.v`) is a read-only lookup table with 16 entries
 
 The GEMV peripheral computes Y = W×X + b, where W is an int8 matrix, X is an int8 vector, b is an optional int32 bias vector, and Y is an int32 output vector.
 
-**v2 Design (32-bit packed data path, 4-lane MAC):**
+**Design (32-bit packed data path, 4-lane MAC):**
 
-The GEMV peripheral evolved through two design iterations. The v1 design used 8-bit CSR registers for X and W, requiring one MMIO write per int8 element. For a 32×32 matvec this meant 32+1024+32 = 1,088 CSR writes per call, with the bus dominating total latency. The compute kernel performed one int8 multiply-accumulate per clock cycle (1,024 cycles for 32×32).
-
-The v2 design widens both the `X_IN` and `W_IN` CSR registers to 32 bits. The firmware driver packs four int8 elements into each 32-bit word using `pack4_i8()`, reducing CSR-bus traffic by 4× (approximately 272 writes per 32×32 matvec). The internal X and W memories are restructured as 32-bit word arrays, and the FSM reads one packed 32-bit word from each per clock cycle, computing four signed int8 multiply-accumulate operations in parallel (a 4-lane dot-product unit built from 4 DSP blocks). The compute phase drops to 256 cycles for a 32×32 matvec — another 4× improvement on the hardware side.
+The GEMV peripheral uses a 32-bit packed data path with a 4-lane parallel MAC. Both the `X_IN` and `W_IN` CSR registers are 32 bits wide; the firmware driver packs four int8 elements into each word using `pack4_i8()`, so a 32×32 matvec requires only about 272 CSR writes — a 4× reduction in bus traffic compared to a naïve one-byte-per-write design (which would need 1,088 writes). The internal X and W memories are 32-bit word arrays, and the FSM reads one packed word from each per clock cycle, computing four signed int8 multiply-accumulate operations in parallel (a 4-lane dot-product unit built from 4 DSP blocks). A 32×32 matvec therefore completes in 256 compute cycles — a further 4× improvement over a one-MAC-per-cycle design. The two optimisations are independent and multiply: 4× on the bus and 4× on compute.
 
 **Key features:**
 - **32-bit packed data path:** 4× reduction in CSR-bus writes.
@@ -525,20 +522,16 @@ The 8 DSP blocks in the accelerated build comprise 4 for the DOT8 multiplier arr
 
 #### Firmware Architecture
 
-The firmware is organized as a set of shared common sources plus six mode-specific main files. All modes share the same TinyFormer encoder implementation and hardware paths are selected at compile time using feature macros.
+The firmware is organized as a set of shared common sources plus mode-specific main files. Both configurations share the same TinyFormer encoder implementation, and hardware paths are selected at compile time using feature macros. This report focuses on the two end-point configurations — the pure-software baseline and the fully-accelerated `accel_all` build.
 
 **Table 5 — Firmware Build Modes**
 
 | Mode | Accelerators Active | Feature Macros |
 |---|---|---|
 | Baseline | None | `USE_TRAINED_WEIGHTS`, `USE_LITEX_UART` |
-| accel_dot8 | DOT8 | + `USE_DOT8_HW` |
-| accel_lut | EXP-LUT | + `USE_EXP_LUT_HW`, `EXP_LUT_USE_LITEX_CSR` |
-| accel_gemv | GEMV | + `USE_GEMV_HW`, `GEMV_USE_LITEX_CSR` |
-| accel_dot8_lut | DOT8 + EXP-LUT | + `USE_DOT8_HW`, `USE_EXP_LUT_HW` |
-| accel_all | DOT8 + EXP-LUT + GEMV | All of the above |
+| accel_all | DOT8 + EXP-LUT + GEMV | + `USE_DOT8_HW`, `USE_EXP_LUT_HW`, `USE_GEMV_HW` (with the LiteX-CSR variants) |
 
-When a macro is not defined, the corresponding hardware is never accessed — no custom instruction opcode is issued, no MMIO register is touched — so the same codebase runs correctly on a plain VexRiscv or on a partial SoC.
+When a macro is not defined, the corresponding hardware is never accessed — no custom instruction opcode is issued, no MMIO register is touched — so the same codebase runs correctly on a plain VexRiscv (baseline) or with all three accelerators enabled (`accel_all`).
 
 #### TinyFormer Encoder (`tinyformer.c`)
 
@@ -546,7 +539,7 @@ The encoder implements the full Transformer encoder pipeline in portable C with 
 
 **Algorithm stages:**
 
-1. **Q/K/V linear projections:** Each input token (row of X) is multiplied by the weight matrices W_q, W_k, W_v via row-major int8 matrix-vector multiplication with int32 accumulation. Results are right-shifted by 7 bits and saturated to int8 using the `saturate_int32_to_int8` macro. This produces Q, K, and V tensors of shape 16×32. In the accel_gemv build, all projections use the GEMV peripheral.
+1. **Q/K/V linear projections:** Each input token (row of X) is multiplied by the weight matrices W_q, W_k, W_v via row-major int8 matrix-vector multiplication with int32 accumulation. Results are right-shifted by 7 bits and saturated to int8 using the `saturate_int32_to_int8` macro. This produces Q, K, and V tensors of shape 16×32. In `accel_all`, all projections use the GEMV peripheral.
 
 2. **Streaming scaled dot-product attention:** One query position is processed at a time, reusing 1D scratch buffers (`scores[16]`, `exp_buf[16]`) rather than allocating a full 16×16 attention matrix. For each query position: (a) the int32 dot-product against each of the 16 key positions is computed and right-shifted by 5 bits to approximate the 1/√D scaling; (b) the per-query maximum score is subtracted for numerical stability and the result further right-shifted by 3 bits to compress the dynamic range into roughly [−15, 0] before being clamped and used as the exp index; (c) exp values are obtained (via EXP-LUT in accelerated builds, `compute_exp_q10()` in the baseline) and summed; (d) each weight is normalized to Q15 as `(exp_buf[j] << 15) / sum_exp` and the Q15-weighted sum over the value vectors, right-shifted by 15, produces the context vector. The inner dot-product loops use the DOT8 instruction in accelerated builds.
 
@@ -557,45 +550,7 @@ The encoder implements the full Transformer encoder pipeline in portable C with 
 **Figure 6 — TinyFormer Algorithm Pipeline**
 
 ```
-                     Input X [16][32]
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-     W_q [32][32]    W_k [32][32]    W_v [32][32]
-          │                │                │
-          ▼                ▼                ▼
-      Q [16][32]      K [16][32]      V [16][32]
-          │
-          └─────────────────────────────────┐
-                                            │
-              ┌─────────────────────────────▼────────────────┐
-              │     Scaled Dot-Product Attention (streaming)  │
-              │  for each query i:                            │
-              │    scores[j] = dot(Q[i], K[j]) / √32         │
-              │    weights[j] = softmax(scores)[j]  ← EXP-LUT│
-              │    context[i] = Σ weights[j] × V[j]          │
-              └───────────────────────────────────────────────┘
-                           │
-                     Context [16][32]
-                           │ W_o [32][32]
-                           ▼
-                    projected [16][32]
-                           │
-                attn_out = X + projected  (residual)
-                           │
-              ┌────────────▼─────────────┐
-              │  FFN Layer 1: W_ff1      │
-              │  [32→64], ReLU           │
-              └────────────┬─────────────┘
-                           │  hidden [16][64]
-              ┌────────────▼─────────────┐
-              │  FFN Layer 2: W_ff2      │
-              │  [64→32]                 │
-              └────────────┬─────────────┘
-                           │
-                output = attn_out + ffn_out  (residual)
-                           │
-                    Output [16][32]
+(figure)
 ```
 
 **Table 6 — Algorithm Operation Count per Stage**
@@ -665,31 +620,26 @@ The 71% cycle share of softmax exp() reflects a deliberate methodological choice
 
 All measurements were taken on the same FPGA bitstream, with only the firmware binary changing between modes. The on-chip LiteX `timer0` provides cycle-accurate measurement independent of host-side serial latency.
 
-**Table 8 — Three-Way Performance Comparison**
+**Table 8 — Performance Comparison**
 
 | Mode | Firmware Path | Cycles | Latency | Speedup |
 |---|---|---|---|---|
 | **Baseline** | Runtime fixed-point exp(), software matvec, software dot products | 75,900,400 | 759.00 ms | 1.00× |
-| **accel_all v1** | HW LUT + DOT8 + 1-lane GEMV (byte-wide) | 19,067,129 | 190.67 ms | 3.98× |
-| **accel_all v2** | HW LUT + DOT8 + 4-lane packed GEMV | **15,755,300** | **157.55 ms** | **4.82×** |
+| **accel_all** | HW LUT + DOT8 + 4-lane packed GEMV | **15,755,300** | **157.55 ms** | **4.82×** |
 
-Speedup (final): 75,900,400 / 15,755,300 = **4.82×**
+Speedup: 75,900,400 / 15,755,300 = **4.82×**
 
-**Figure 8 — Three-Way Performance Comparison (ms per 10-sample inference)**
+**Figure 8 — Performance Comparison (ms per 10-sample inference)**
 
 ```
-  Baseline       ██████████████████████████████████████████████████  759.0 ms
-  accel_all v1   ████████████  190.7 ms  (3.98×)
-  accel_all v2   ██████  157.6 ms  (4.82×)
+(graph)
 ```
 
 ### 5.3 Per-Accelerator Contribution
 
 **EXP-LUT** eliminates the dominant bottleneck (71% of baseline cycles) by replacing a ~21,000-cycle per-call runtime computation with a ~12-cycle MMIO lookup — approximately 1,700× faster per call. Despite its hardware simplicity (a combinational ROM), this accelerator delivers the largest fraction of the total cycle reduction.
 
-**GEMV (v2)** is the single largest contributor in absolute cycle savings. Comparing baseline (software matvec) to v2 GEMV, the speedup per 32×32 matvec call is approximately 8× (from ~17,000 cycles to ~2,000 cycles). This improvement comes equally from two independent optimizations: (1) the 4× reduction in CSR-bus writes due to the 32-bit packed data path, and (2) the 4× reduction in compute cycles due to the parallel 4-lane MAC.
-
-**GEMV v1 → v2 transition** saves approximately 3.3 M cycles per inference (~33 ms), yielding a 1.21× improvement specifically from the v1-to-v2 upgrade.
+**GEMV** is the single largest contributor in absolute cycle savings. Comparing the baseline software matvec to the GEMV peripheral, the speedup per 32×32 matvec call is approximately 8× (from ~17,000 cycles to ~2,000 cycles). This improvement comes equally from two independent optimizations: (1) the 4× reduction in CSR-bus writes due to the 32-bit packed data path, and (2) the 4× reduction in compute cycles due to the parallel 4-lane MAC.
 
 **DOT8** contributes a modest speedup consistent with the initial 1% cycle share of attention dot products. Its contribution is small in the final measurement because the dominant bottlenecks (softmax and matvec) are addressed by the other two accelerators.
 
@@ -698,8 +648,7 @@ Speedup (final): 75,900,400 / 15,755,300 = **4.82×**
 | Accelerator | Cycles Saved (vs Baseline) | Contribution to Speedup |
 |---|---|---|
 | EXP-LUT | ~53,800,000 | Primary — eliminates 71% bottleneck |
-| GEMV (v1) | ~14,300,000 | Secondary — eliminates majority of matvec cost |
-| GEMV v1→v2 upgrade | ~3,300,000 | Tertiary — 4× packed bus + 4× parallel MAC |
+| GEMV | ~14,000,000 | Secondary — eliminates the bulk of matrix-vector cost (packed 4-lane design: 4× bus + 4× compute) |
 | DOT8 | ~800,000 | Minor — consistent with 1% initial share |
 
 ### 5.4 Correctness Verification
@@ -708,7 +657,7 @@ Before any performance numbers were reported, every accelerated build was requir
 
 **Table 10 — Correctness Checksums (All 10 Samples)**
 
-| Sample | ENC_CKSUM (Baseline) | ENC_CKSUM (accel_all v2) | Match |
+| Sample | ENC_CKSUM (Baseline) | ENC_CKSUM (accel_all) | Match |
 |---|---|---|---|
 | 0 | 0x00005CE7 | 0x00005CE7 | ✓ |
 | 1 | 0x00006557 | 0x00006557 | ✓ |
@@ -728,15 +677,6 @@ All 10 checksums match. Predicted classes also match the baseline for every samp
 Relative to a plain VexRiscv baseline, the three accelerators add **+3.9 percentage points of LUT** (6.13% → **10.04%**), **+1.8 percentage points of flip-flops** (2.49% → 4.32%), and **+3.3 percentage points of DSP** (0% → 3.3%). Measured power rises from **0.740 W to 0.792 W**, a factor of **1.07** (≈ 7%). The full breakdown is given in Table 4.
 
 It is worth being candid about the area and power outcome. Among the project's original goals was the aspiration to keep the design *below* 10% of the LUT fabric and to limit power growth. In practice, both area and power **increased modestly** — this is a fundamental trade-off of FPGA acceleration: dedicated arithmetic units and wider data paths consume logic and switch more, in exchange for fewer cycles. The design landed at 10.04% LUT — marginally over the sub-10% aspiration — and 1.07× power. Set against a **4.82× speedup**, this is a strongly favorable exchange: the system reaches a 157.55 ms target latency for only ~7% more power, and approximately **90% of the FPGA fabric remains free** for future extensions.
-
-**Figure 9 — GEMV v1 vs. v2 Cycle Comparison (per inference)**
-
-```
-   Cycles (M):
-   accel_all v1  ████████████  19.1 M  (3.98×)
-   accel_all v2  ██████████  15.8 M  (4.82×)
-                 ↑ 3.3 M saved by 4-lane packed GEMV upgrade
-```
 
 ---
 
@@ -763,7 +703,7 @@ The single partial result is the LUT budget: the design reached 10.04% rather th
 
 2. **The simplest accelerator delivers the largest gain.** The EXP-LUT peripheral — a combinational ROM with two CSR registers — accounts for the majority of the total cycle reduction despite being simpler to implement than either the custom instruction or the GEMV core. This outcome reflects the importance of targeting the true bottleneck rather than the most technically interesting operation.
 
-3. **Data-path width is as important as compute parallelism.** The GEMV v1-to-v2 improvement comes in equal parts from reducing CSR-bus traffic (4× via packed 32-bit writes) and from parallelizing the MAC unit (4× via the 4-lane dot product). Neglecting either half of this optimization would have left a 4× improvement on the table. This finding generalizes: for MMIO-coupled accelerators, memory and bus bandwidth is a co-bottleneck with raw arithmetic throughput.
+3. **Data-path width is as important as compute parallelism.** The GEMV peripheral's efficiency comes in equal parts from reducing CSR-bus traffic (4× via packed 32-bit writes) and from parallelizing the MAC unit (4× via the 4-lane dot product). Neglecting either half of this optimization would have left a 4× improvement on the table. This finding generalizes: for MMIO-coupled accelerators, memory and bus bandwidth is a co-bottleneck with raw arithmetic throughput.
 
 4. **Correctness must precede performance measurement.** The ENC_CKSUM gate prevented reporting speedups that might have reflected skipped computation or numerical corruption. The discipline of requiring bit-identical encoder output before any benchmarking is essential to the validity of all reported results.
 
@@ -775,7 +715,7 @@ The single partial result is the LUT budget: the design reached 10.04% rather th
 
 - **DMA-based GEMV.** The current design requires the CPU to write all W and X elements to CSR registers over the system bus. A DMA engine would allow the GEMV core to fetch rows of W directly from DDR2, eliminating CPU involvement in data movement entirely and further reducing inference latency by an estimated 2–3× for GEMV-bound operations.
 
-- **Pipelined GEMV dot4 stage.** The current v2 design does not meet timing at 100 MHz (WNS = −6.3 ns). Adding one pipeline register between the 4-lane multiplier array and the adder tree would close timing cleanly at 100 MHz while adding only one cycle of latency per output element — negligible at the scale of 32 output elements per call.
+- **Pipelined GEMV dot4 stage.** The current GEMV design does not meet timing at 100 MHz (WNS = −6.3 ns). Adding one pipeline register between the 4-lane multiplier array and the adder tree would close timing cleanly at 100 MHz while adding only one cycle of latency per output element — negligible at the scale of 32 output elements per call.
 
 - **Wider DOT8.** An 8-lane DOT8 instruction — using two packed 32-bit source words and one 64-bit source/two 32-bit sources — would double attention throughput and become worthwhile in models with larger model dimension D or multi-head attention.
 

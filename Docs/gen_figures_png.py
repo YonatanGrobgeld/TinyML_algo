@@ -106,7 +106,7 @@ def fig1():
     title(ax, W, H, "Figure 1 — TinyFormer System Block Diagram")
     container(ax, 6, 10, 108, 64, "Nexys4DDR FPGA  ·  Xilinx Artix-7 xc7a100t  ·  100 MHz")
     cpu = box(ax, 12, 44, 30, 16, "VexRiscv\nRV32IM CPU\n+ DOT8 plugin", "cpu", 10, bold=True)
-    fw  = box(ax, 12, 20, 30, 18, "Firmware modes\n(compile-time):\nbaseline · accel_dot8\naccel_lut · accel_gemv\naccel_all", "note", 8.5, dashed=True)
+    fw  = box(ax, 12, 20, 30, 18, "Firmware modes\n(compile-time):\nbaseline\naccel_all\n(DOT8 + EXP-LUT + GEMV)", "note", 8.5, dashed=True)
     bus = box(ax, 54, 20, 12, 40, "LiteX\nSoC Bus\n(Wishbone\n/ CSR)", "bus", 8.5, bold=True)
     lut = box(ax, 80, 50, 32, 11, "EXP-LUT (MMIO)\n16-entry Q10 ROM", "acc", 9.5)
     gem = box(ax, 80, 37, 32, 11, "GEMV (MMIO)\n4-lane int8 MAC", "acc", 9.5)
@@ -260,10 +260,10 @@ def fig7():
 
 # ============ Figure 8 — latency bars ============
 def fig8():
-    labels = ["Baseline", "accel_all v1", "accel_all v2"]
-    ms = [759.00, 190.67, 157.55]
-    spd = ["1.00×", "3.98×", "4.82×"]
-    colors = ["#e8918d", "#7fa8d8", "#8fc77f"]
+    labels = ["Baseline", "accel_all"]
+    ms = [759.00, 157.55]
+    spd = ["1.00×", "4.82×"]
+    colors = ["#e8918d", "#8fc77f"]
     fig, ax = plt.subplots(figsize=(7.8, 5.2)); fig.patch.set_facecolor("white")
     bars = ax.bar(labels, ms, color=colors, edgecolor="#444444", width=0.6)
     for b, m, s in zip(bars, ms, spd):
@@ -302,6 +302,6 @@ def fig9():
     save(fig, "Figure9_GEMV_v1_v2_Cycles.png")
 
 
-for f in (fig1, fig2, fig3, fig4, fig5, fig6, fig7, fig8, fig9):
+for f in (fig1, fig2, fig3, fig4, fig5, fig7, fig8):
     f()
 print("done")

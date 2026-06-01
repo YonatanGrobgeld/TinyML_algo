@@ -18,24 +18,27 @@ OUT = "/home/ronweinstein/workspace/university/Final_Project/TinyFormer_algo/Doc
 FIGDIR = "/home/ronweinstein/workspace/university/Final_Project/TinyFormer_algo/Docs/figures"
 
 PNG = {}
-for _n in range(1, 10):
+for _n in (1, 2, 3, 4, 5, 7, 8):          # generated diagrams/charts (titles baked in)
     _g = sorted(glob.glob(os.path.join(FIGDIR, f"Figure{_n}_*.png")))
     if _g:
         PNG[_n] = _g[0]
+# Figure 6 is the user-provided encoder architecture image (no baked figure title).
+PNG[6] = os.path.join(FIGDIR, "Figure6_Encoder_Architecture.jpeg")
 
-# Waveform screenshots (Figures 10-15) — raw captures, so their text caption IS shown.
+# Waveform screenshots (Figures 9-14) — raw captures, so their text caption IS shown.
 WAVEDIR = "/home/ronweinstein/workspace/university/Final_Project/TinyFormer_algo/Docs/waveforms"
 PNG.update({
-    10: os.path.join(WAVEDIR, "GEMV_waveform/GEMV1.jpeg"),
-    11: os.path.join(WAVEDIR, "GEMV_waveform/GEMV2.jpeg"),
-    12: os.path.join(WAVEDIR, "GEMV_waveform/GEMV3.jpeg"),
-    13: os.path.join(WAVEDIR, "GEMV_waveform/GEMV4.jpeg"),
-    14: os.path.join(WAVEDIR, "LUT_waveform/LUT1.jpeg"),
-    15: os.path.join(WAVEDIR, "LUT_waveform/LUT2.jpeg"),
+    9:  os.path.join(WAVEDIR, "GEMV_waveform/GEMV1.jpeg"),
+    10: os.path.join(WAVEDIR, "GEMV_waveform/GEMV2.jpeg"),
+    11: os.path.join(WAVEDIR, "GEMV_waveform/GEMV3.jpeg"),
+    12: os.path.join(WAVEDIR, "GEMV_waveform/GEMV4.jpeg"),
+    13: os.path.join(WAVEDIR, "LUT_waveform/LUT1.jpeg"),
+    14: os.path.join(WAVEDIR, "LUT_waveform/LUT2.jpeg"),
 })
-# Figures 1-9 have the "Figure N — title" baked into the rendered image, so we
-# suppress the duplicate text caption for those only.
-TITLE_BAKED = set(range(1, 10))
+# Figures 1-5,7,8 have the "Figure N — title" baked into the rendered image, so we
+# suppress the duplicate text caption for those only. Figure 6 and the waveforms
+# (9-14) show their markdown caption.
+TITLE_BAKED = {1, 2, 3, 4, 5, 7, 8}
 
 # What each figure should become in the real document.
 FIG = {
