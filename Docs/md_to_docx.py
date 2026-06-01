@@ -199,6 +199,11 @@ def add_tbd(kind, desc):
     doc.add_paragraph()
 
 
+# Waveform captures (under WAVEDIR) need to stay large enough to read;
+# only the diagrams/graphs get the tighter cap.
+WAVEFORM_NUMS = {n for n, p in PNG.items() if p.startswith(WAVEDIR)}
+
+
 def add_image(num):
     path = PNG.get(num)
     if not path or not os.path.exists(path):
@@ -206,7 +211,10 @@ def add_image(num):
     with Image.open(path) as im:
         w, h = im.size
     aspect = w / h
-    maxw, maxh = 5.2, 4.2          # inches; smaller cap packs figures tighter
+    if num in WAVEFORM_NUMS:
+        maxw, maxh = 5.6, 6.0      # original size — keep waveforms readable
+    else:
+        maxw, maxh = 5.2, 4.2      # tighter cap for diagrams/graphs
     width = maxw if maxw / aspect <= maxh else maxh * aspect
     p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.add_run().add_picture(path, width=Inches(width))
