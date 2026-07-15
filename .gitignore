@@ -20,3 +20,7 @@ xsim.dir/
 *.str
 xsim_*.tcl
 *.out
+
+# macOS archive junk
+__MACOSX/
+.DS_Store

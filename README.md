@@ -167,6 +167,8 @@ At the top level:
 - **`pulp-transformer/`** – Original PULP transformer kernels, tests, and documentation.
 - **`litex_port/`** – TinyFormer firmware for VexRiscv + LiteX (FPGA bring-up and benchmarking).
 - **`hw_extensions/`** – Accelerator RTL and SW: `dot8/`, `exp_lut/`, `gemv/` (each with `sw/` drivers and, where applicable, `litex/` or RTL).
+- **`Docs/`** – Final report sources, figures, and generation scripts.
+- **`.agent/notes/`** – Archived development working notes (not project documentation).
 
 **`litex_port/` layout (use this for bring-up):**
 
