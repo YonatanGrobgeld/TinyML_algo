@@ -49,7 +49,7 @@ The `W_ADDR_BITS` parameter is also reduced from 12 (4096-byte addressing) to 10
 
 The 21 % v1→v2 improvement comes entirely from this peripheral; the v2 GEMV core uses **4 DSP blocks** for the parallel multiply, matched by the **4 DSP blocks** already used by the VexRiscv DOT8 plugin for a total of 8 DSPs in the SoC.
 
-**Vivado timing.** The 4-input adder-tree + accumulator-add adds combinational depth; at 100 MHz, WNS = **−6.3 ns** (the worst path is `main_ctrl_storage_reg[len_64] → gemv_core/acc_reg`). The bitstream programs and runs correctly at room temperature with bit-identical `ENC_CKSUM` versus baseline, but is **not** timing-safe — the production fix is to either pipeline the dot4 stage (one extra latency cycle) or run the SoC at ~75 MHz instead of 100 MHz.
+**Vivado timing.** The earlier single-cycle core (fetch → 4-lane multiply → accumulate in one clock) did not close timing at 100 MHz (WNS ≈ −6.3 ns). The current **v3** core pipelines that path into three stages (fetch → multiply → accumulate) and registers the memory reads, so it **meets timing at 100 MHz**: WNS = **+0.019 ns** post-route (all constraints met, 0 failing endpoints), with bit-identical `ENC_CKSUM` versus baseline.
 
 ## Future v3 ideas
 
