@@ -11,8 +11,7 @@ All three modes measured on the **same FPGA bitstream**, with `ENC_CKSUM` bit-id
 | Mode | CYCLES | Time | Speedup |
 |---|---|---|---|
 | **Baseline** (real-math softmax exp, software matvec) | 75,900,400 | **759.00 ms** | 1.00× |
-| accel_all v1 (byte-wide GEMV) | 19,067,129 | 190.67 ms | 3.98× |
-| **accel_all v2** (32-bit packed GEMV + 4-lane MAC) | **15,755,300** | **157.55 ms** | **4.82×** |
+| **accel_all** (32-bit packed GEMV + 4-lane MAC) | **15,755,300** | **157.55 ms** | **4.82×** |
 
 Time = CYCLES / 100 MHz. See [REPORT_NOTES_IMPLEMENTATION.md §9](REPORT_NOTES_IMPLEMENTATION.md) for cycle math, per-component breakdown, Vivado resource/timing report, and reproduction steps.
 
