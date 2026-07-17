@@ -167,7 +167,7 @@ Comparing logs between baseline and accelerated builds is done by checking that 
 
 - **EXP LUT.** The hardware table is fixed (16 entries, Q10).
 
-- **Timing closure at 100 MHz.** The v2 GEMV's 4-lane MAC adds combinational depth; final Vivado WNS at 100 MHz is **−6.3 ns** on the xc7a100t-1 (the design works at room temperature, and `ENC_CKSUM` is bit-identical with baseline across all 10 demo samples, but is not timing-safe). For production use, either pipeline the dot4 stage (one extra cycle of latency) or lower `sys_clk_freq` to ~75 MHz to close timing cleanly.
+- **Timing closure at 100 MHz.** The v3 GEMV core pipelines the fetch → multiply → accumulate path (and registers the memory reads), so the SoC **meets timing at 100 MHz**: final Vivado WNS = **+0.019 ns** post-route (all constraints met, 0 failing endpoints), `ENC_CKSUM` bit-identical with baseline across all 10 demo samples. (The earlier single-cycle v2 core did not close timing — WNS ≈ −6.3 ns; the DOT8 custom instruction, the next limiter at ≈ −1.7 ns, was removed.)
 
 ---
 
@@ -276,7 +276,7 @@ To make the EXP_LUT speedup a fair comparison, the baseline firmware (compiled w
 | RAMB36 | 47 | 135 | 34.81 % |
 | DSP Blocks | 4 (VexRiscv DOT8) + 4 (GEMV 4-lane MAC) = 8 | 240 | 3.33 % |
 
-**Timing.** WNS = **−6.309 ns** on the worst path (inside `gemv_core` — the 4-lane multiply + adder-tree + accumulator-add chain). The design routes cleanly (0 routing errors) and runs correctly at room temperature, but a production version should either pipeline the dot4 stage or drop `sys_clk_freq` to ~75 MHz.
+**Timing.** WNS = **+0.019 ns** post-route (met) with the pipelined v3 `gemv_core` — the fetch → multiply → accumulate path is split across register stages so it closes at 100 MHz. The design routes cleanly (0 routing errors). (The earlier single-cycle core was −6.309 ns; pipelining GEMV and removing the single-cycle DOT8 instruction closed timing.)
 
 ---
 

@@ -337,7 +337,7 @@ Resource and power figures are reported for both configurations on the same xc7a
 
 The 8 DSP blocks split as 4 for the DOT8 multiplier array and 4 for the GEMV 4-lane MAC; the plain RV32IM multiplier maps to logic (hence 0% baseline DSP). The accelerated build also uses 47 of 135 RAMB36 block-RAMs (≈34.8%) and 968 LUTs of distributed RAM. At 10.04% LUT, ~90% of the fabric remains free.
 
-**Timing.** Vivado reports WNS = −6.309 ns on the worst path inside `gemv_core.v` (the 4-lane multiply + adder-tree + accumulator chain). The design routes cleanly and is bit-identical across all samples at room temperature; for production the dot4 stage should be pipelined (one extra cycle) or `sys_clk_freq` reduced to ≈75 MHz to close timing.
+**Timing.** The pipelined GEMV core (v3) meets timing at 100 MHz: Vivado reports WNS = +0.019 ns post-route, all timing constraints met, 0 failing endpoints. (The earlier single-cycle core did not close timing — WNS ≈ −6.3 ns — which motivated pipelining the fetch → multiply → accumulate path; the DOT8 custom instruction, whose single-cycle execute→bypass path was the next limiter, was removed.) The design routes cleanly and is bit-identical across all samples.
 
 ### 3.3 Software Description
 
@@ -676,7 +676,7 @@ The single partial result is the LUT budget: 10.04% rather than strictly below 1
 
 - **DMA-based GEMV.** A DMA engine fetching W rows from DDR2 directly would remove CPU CSR streaming entirely, an estimated 2–3× further latency cut for GEMV-bound operations.
 
-- **Pipelined GEMV dot4 stage.** GEMV does not meet timing at 100 MHz (WNS = −6.3 ns). One pipeline register between the multiplier array and adder tree would close timing, adding just one cycle of latency per output element (negligible at 32 elements/call).
+- **DMA-fed GEMV.** The GEMV core is now pipelined and meets timing at 100 MHz (WNS = +0.019 ns). A natural next step is a DMA path so the core fetches W rows from main RAM directly, removing CPU-side CSR streaming.
 
 - **Wider DOT8.** An 8-lane DOT8 would double attention throughput, worthwhile for larger D or multi-head attention.
 

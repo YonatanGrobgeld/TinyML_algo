@@ -1,30 +1,34 @@
 /*
  * ==========================================================================
  *  WHAT THIS FILE DOES (in simple words):
- *  The MATRIX ENGINE (v2) in Verilog: computes Y = W*X + b for int8 matrix/vector with
+ *  The MATRIX ENGINE (v3) in Verilog: computes Y = W*X + b for int8 matrix/vector with
  *  32 or 64 dimensions. The CPU first streams X, W, b into internal memories (4 packed
  *  int8 values per 32-bit write - 4x fewer bus writes than v1), then pulses 'start'.
- *  A 3-state machine (IDLE -> COMPUTE -> DONE) then does 4 multiplies+adds PER CLOCK
- *  (the 'dot4' 4-lane MAC - 4x faster than v1's one-per-clock), row by row, and raises
- *  'done'. The CPU reads results one at a time via Y_OUT, poking Y_NEXT to advance.
- *  The two 4x wins (bus + compute) are independent and multiply.
- *  BIG PICTURE: The hardware that removed the 21% matvec bottleneck; 32x32 matvec in ~256 compute cycles.
+ *  A state machine (IDLE -> COMPUTE -> DONE) sweeps each row: the 'dot4' 4-lane MAC does
+ *  4 multiplies+adds per column word, now PIPELINED across fetch -> multiply -> accumulate
+ *  stages (result bit-identical to v2) so the design meets timing at 100 MHz. It raises
+ *  'done'; the CPU reads results one at a time via Y_OUT, poking Y_NEXT to advance.
+ *  BIG PICTURE: The hardware that removed the 21% matvec bottleneck; 32x32 matvec in ~288 compute cycles.
  * ==========================================================================
  */
 
 /*
- * GEMV core v2: Y = W * X + b (optional).
+ * GEMV core v3: Y = W * X + b (optional).
  * int8 W, X; int32 b, Y.  LEN and OUT_DIM = 32 or 64.
  *
- * V2 OPTIMIZATIONS vs V1:
- *  1) Packed 32-bit data writes (4 bytes per CSR write) — cuts CPU↔GEMV
- *     MMIO traffic by 4x for X and W loading.
- *  2) 4-lane parallel signed int8 MAC per cycle — cuts compute time by 4x.
+ * v3 vs v2: identical interface and numerical result, but the inner
+ * "fetch -> 4-lane multiply -> accumulate" datapath is now PIPELINED so it
+ * closes timing at 100 MHz. v2 did all of that in one clock (row -> w_addr ->
+ * async w_mem read -> 4 signed mults -> adder tree -> 32-bit accumulate),
+ * which was the -6.3 ns critical path (row_reg -> acc_reg).
  *
- * Memory layout:
- *  - x_mem, w_mem are now 32-bit-wide word memories (one packed word per addr).
- *  - Byte 0 of each word = LSB (lane 0), byte 3 = MSB (lane 3).
- *  - Index is in WORDS, not bytes.
+ * Pipeline (per column word):
+ *   Stage 1 (fetch)      : register x_mem[col] and w_mem[w_addr] -> *_word_r
+ *                          (registered read => w_mem infers block RAM)
+ *   Stage 2 (multiply)   : 4-lane signed int8 dot product -> dot4_r
+ *   Stage 3 (accumulate) : acc += dot4_r
+ * Columns of a row are issued in order and drained before the next row, so
+ * the accumulation order (and thus every int32 result) is identical to v2.
  */
 
 module gemv_core #(
@@ -79,20 +83,23 @@ module gemv_core #(
     assign LEN_WORDS = len_64     ? 16 : 8;
     assign OUT_DIM   = out_dim_64 ? 64 : 32;
 
-    /* FSM - SIMPLE WORDS: a 3-step state machine.
-     * S_IDLE   : wait for the CPU's 'start'; preload the total with row 0's bias.
-     * S_COMPUTE: for each output row, eat LEN/4 packed words (one dot4 per
-     *            clock), then store the finished total into y_mem[row].
-     * S_DONE   : raise 'done' and wait for the CPU to read Y and clear us. */
+    /* FSM */
     localparam [2:0] S_IDLE    = 3'd0,
                      S_COMPUTE = 3'd1,
                      S_DONE    = 3'd2;
     reg [2:0] state;
 
-    /* row in OUT space; col in WORD space inside one row */
+    /* row in OUT space; col = issue pointer in WORD space inside one row */
     reg [OUT_BITS-1:0]    row;
     reg [LEN_WBITS:0]     col;
     reg signed [31:0]     acc;
+    reg [LEN_WBITS:0]     acc_cnt;   /* accumulations completed this row */
+
+    /* Pipeline registers */
+    reg [31:0]            x_word_r, w_word_r;   /* stage 1: fetched operands  */
+    reg                   v_fetch;              /* stage 1 produced a valid op */
+    reg signed [31:0]     dot4_r;               /* stage 2: 4-lane dot product */
+    reg                   v_mul;                /* stage 2 valid               */
 
     /* W row base in words: row * LEN_WORDS */
     wire [W_ADDR_BITS-1:0] w_row_base;
@@ -100,23 +107,21 @@ module gemv_core #(
     assign w_row_base = len_64 ? ({4'd0, row} * 10'd16) : ({4'd0, row} * 10'd8);
     assign w_addr     = w_row_base + {6'd0, col[LEN_WBITS-1:0]};
 
-    /* 4-lane parallel signed dot product on the fetched X word and W word */
-    wire [31:0] x_word = x_mem[col[LEN_WBITS-1:0]];
-    wire [31:0] w_word = w_mem[w_addr];
-    /* SIMPLE WORDS: the heart of the engine - take one packed X word and one
-     * packed W word (4 int8 values each), do 4 multiplies and add them, all
-     * inside ONE clock cycle. This is the '4-lane MAC' (uses 4 DSP blocks). */
-    wire signed [31:0] dot4 =
-          ($signed(x_word[ 7: 0]) * $signed(w_word[ 7: 0]))
-        + ($signed(x_word[15: 8]) * $signed(w_word[15: 8]))
-        + ($signed(x_word[23:16]) * $signed(w_word[23:16]))
-        + ($signed(x_word[31:24]) * $signed(w_word[31:24]));
+    /* Stage-1 combinational reads (registered below into *_word_r) */
+    wire        issue    = (col < LEN_WORDS);
+    wire [31:0] x_word_c = x_mem[col[LEN_WBITS-1:0]];
+    wire [31:0] w_word_c = w_mem[w_addr];
+
+    /* Stage-2 combinational: 4-lane signed dot product of REGISTERED operands */
+    wire signed [31:0] dot4_c =
+          ($signed(x_word_r[ 7: 0]) * $signed(w_word_r[ 7: 0]))
+        + ($signed(x_word_r[15: 8]) * $signed(w_word_r[15: 8]))
+        + ($signed(x_word_r[23:16]) * $signed(w_word_r[23:16]))
+        + ($signed(x_word_r[31:24]) * $signed(w_word_r[31:24]));
 
     assign y_rd_data = y_mem[y_rd_idx];
 
-    /* --- Write path: X, W (packed 32-bit), B (32-bit) ---
-     * SIMPLE WORDS: every CPU write lands at an auto-incrementing position,
-     * so the CPU just streams values in order - no addresses needed. */
+    /* --- Write path: X, W (packed 32-bit), B (32-bit) --- */
     always @(posedge clk) begin
         if (reset || clear_done) begin
             x_wr_idx <= 0;
@@ -146,42 +151,70 @@ module gemv_core #(
             y_rd_idx <= y_rd_idx + 1;
     end
 
-    /* --- FSM --- */
+    /* --- Compute FSM (pipelined) --- */
     always @(posedge clk) begin
         if (reset) begin
-            state <= S_IDLE;
-            busy  <= 0;
-            done  <= 0;
-            row   <= 0;
-            col   <= 0;
-            acc   <= 0;
+            state   <= S_IDLE;
+            busy    <= 0;
+            done    <= 0;
+            row     <= 0;
+            col     <= 0;
+            acc     <= 0;
+            acc_cnt <= 0;
+            v_fetch <= 0;
+            v_mul   <= 0;
         end else begin
             case (state)
                 S_IDLE: begin
                     if (start && !busy) begin
-                        state <= S_COMPUTE;
-                        busy  <= 1;
-                        done  <= 0;
-                        row   <= 0;
-                        col   <= 0;
-                        acc   <= bias_en ? b_mem[0] : 32'sd0;
+                        state   <= S_COMPUTE;
+                        busy    <= 1;
+                        done    <= 0;
+                        row     <= 0;
+                        col     <= 0;
+                        acc     <= bias_en ? b_mem[0] : 32'sd0;
+                        acc_cnt <= 0;
+                        v_fetch <= 0;
+                        v_mul   <= 0;
                     end
                 end
 
                 S_COMPUTE: begin
-                    if (col < LEN_WORDS) begin
-                        /* 4-lane MAC per cycle */
-                        acc <= acc + dot4;
-                        col <= col + 1;
+                    /* Stage 1: issue read for `col`, register the operands */
+                    if (issue) begin
+                        x_word_r <= x_word_c;
+                        w_word_r <= w_word_c;
+                        v_fetch  <= 1'b1;
+                        col      <= col + 1'b1;
                     end else begin
+                        v_fetch  <= 1'b0;
+                    end
+
+                    /* Stage 2: multiply registered operands */
+                    dot4_r <= dot4_c;
+                    v_mul  <= v_fetch;
+
+                    /* Stage 3: accumulate */
+                    if (v_mul) begin
+                        acc     <= acc + dot4_r;
+                        acc_cnt <= acc_cnt + 1'b1;
+                    end
+
+                    /* Row complete: all LEN_WORDS terms accumulated into acc.
+                     * (v_mul is 0 in this cycle, so no accumulate conflicts.) */
+                    if (acc_cnt == LEN_WORDS) begin
                         y_mem[row] <= acc;
-                        row <= row + 1;
-                        col <= 0;
                         if (row + 1 >= OUT_DIM) begin
                             state <= S_DONE;
-                            busy  <= 0;
-                        end else
-                            acc <= bias_en ? b_mem[row + 1] : 32'sd0;
+                            busy  <= 1'b0;
+                        end else begin
+                            row     <= row + 1'b1;
+                            col     <= 0;
+                            acc     <= bias_en ? b_mem[row + 1] : 32'sd0;
+                            acc_cnt <= 0;
+                            v_fetch <= 1'b0;
+                            v_mul   <= 1'b0;
+                        end
                     end
                 end
 
