@@ -1,3 +1,15 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Entry point of the BASELINE build (NO accelerators - pure software, the 759 ms mode).
+ *  Prints 'MODE: BASELINE', then waits for the letter 's' on the serial port; on each 's'
+ *  it runs the 10-sample demo while timing it with the on-chip timer0 (a hardware
+ *  stopwatch), then prints CYCLES= and TIME_US=. This is the reference all speedups
+ *  are measured against. Built WITHOUT any USE_*_HW macros.
+ *  BIG PICTURE: One of 6 tiny mode mains; all share the same demo_runner/tinyformer code.
+ * ==========================================================================
+ */
+
 // Baseline TinyFormer: no hardware accelerators (plain VexRiscv).
 // Same demo flow as all other modes; UART banner identifies this build.
 // Build with no USE_DOT8_HW, USE_EXP_LUT_HW, or USE_GEMV_HW.
@@ -37,6 +49,10 @@ int main(void) {
       uint32_t sys_clk_freq = CONFIG_CLOCK_FREQUENCY; // From generated/soc.h
 
       // Set timer to maximum value for countdown
+      /* SIMPLE WORDS - the stopwatch: load the hardware timer with the max
+       * value, let it count DOWN at 100 MHz, read it before and after the
+       * demo; the difference = exact clock cycles used. Trusted over PC
+       * wall-clock because the serial link can drop bytes. */
       timer0_en_write(0);
       timer0_load_write(0xFFFFFFFF);
       timer0_reload_write(0xFFFFFFFF);

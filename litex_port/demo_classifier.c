@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  Auto-generated classifier head (older copy).
+ *  BIG PICTURE: See common/demo_classifier.c.
+ * ==========================================================================
+ */
+
 #include <stdint.h>
 #include "demo_classifier.h"
 

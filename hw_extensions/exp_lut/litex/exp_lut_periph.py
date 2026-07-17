@@ -1,3 +1,12 @@
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  The GLUE that puts exp_lut.v on the SoC bus as a peripheral the CPU can talk to.
+#  Written in Python (LiteX/Migen): it creates two registers - 'index' (CPU writes the
+#  question) and 'value' (CPU reads the answer) - and wires them to the Verilog module.
+#  LiteX then auto-generates the C accessors (exp_lut_index_write / exp_lut_value_read).
+#  BIG PICTURE: Hardware exists; this makes it ADDRESSABLE from software.
+# ==========================================================================
+
 # Exp LUT — LiteX CSR wrapper.
 # Index 0..15 (write); value Q10 16-bit (read). Uses .re for strobes where applicable.
 

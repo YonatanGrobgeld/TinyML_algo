@@ -1,4 +1,16 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The hardware CHEAT SHEET for softmax: a tiny Verilog module holding the 16 precomputed
+ *  answers for exp(0)..exp(-15) in Q10 fixed-point (1.0 is stored as 1024). Give it an
+ *  index, it returns the answer instantly (pure combinational - no clock cycles).
+ *  The 16 numbers match the software table byte-for-byte, which is why accelerated
+ *  results are bit-identical to baseline.
+ *  BIG PICTURE: Replaces a ~21,000-cycle software exp() with an instant lookup - the biggest speedup source.
+ * ==========================================================================
+ */
+
+/*
  * Exp LUT — softmax helper for TinyFormer.
  *
  * Maps a signed index (e.g. -15..0) to a fixed-point exp(value) approximation.
@@ -24,6 +36,10 @@ module exp_lut (
      */
     reg [15:0] lut [0:15];
 
+    /* SIMPLE WORDS: the 16 precomputed answers. 1024 means 1.0 (Q10 format:
+     * value/1024). They MUST match the software table in tinyformer.c /
+     * exp_lut.c byte-for-byte - that identity is what makes accelerated
+     * results bit-identical to the baseline. */
     initial begin
         lut[0]  = 1024;  /* ~1.0 * 2^10 */
         lut[1]  = 754;

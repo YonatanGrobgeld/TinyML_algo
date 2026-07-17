@@ -1,3 +1,15 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  SIMULATION test for the GEMV core, run in Vivado xsim BEFORE touching the FPGA.
+ *  Feeds the core a deterministic case, a random case, and an extremes case (all +127/-128),
+ *  computes the expected answers in the testbench itself, and $fatal's on any mismatch.
+ *  Also dumps a waveform (VCD) for visual inspection. (Note: written against the original
+ *  byte-wide v1 load interface.)
+ *  BIG PICTURE: Catches hardware bugs in simulation, where they are easy to see, not on the board.
+ * ==========================================================================
+ */
+
 `timescale 1ns/1ps
 
 /*

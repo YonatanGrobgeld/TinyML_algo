@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  The GLUE that puts gemv_core.v on the SoC bus: creates the 7 registers the CPU sees
+#  (CTRL, X_IN, W_IN, B_IN, Y_OUT, STATUS, Y_NEXT), turns CTRL writes with the start/
+#  clear_done bits into exact one-cycle pulses, and wires each register to the matching
+#  port of the Verilog core. LiteX auto-generates the C accessor functions from this.
+#  BIG PICTURE: Defines the register map that gemv.c (the driver) talks to.
+# ==========================================================================
+
 import os
 from litex.soc.interconnect.csr import AutoCSR, CSRStorage, CSRStatus
 from migen import *

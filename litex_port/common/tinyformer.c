@@ -1,3 +1,19 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  This is the BRAIN of the project: the TinyFormer neural network itself, written in C.
+ *  It takes one recording (16 snapshots x 32 numbers, all small int8 integers) and runs the
+ *  4 encoder stages: (1) build Q/K/V versions of each snapshot, (2) ATTENTION - each snapshot
+ *  blends in the other snapshots that matter to it, (3) output projection + 'add the original
+ *  back' (residual), (4) a small 2-layer FFN + a second residual.
+ *  All math is whole-number (int8 data, int32 running totals, >> shifts instead of division).
+ *  The #ifdef USE_DOT8_HW / USE_EXP_LUT_HW / USE_GEMV_HW switches pick, at compile time,
+ *  whether each heavy step runs in plain software (baseline) or on a hardware accelerator.
+ *  SAME FILE serves both the 759 ms baseline and the 157 ms accelerated build.
+ *  BIG PICTURE: The algorithm that everything else (training, drivers, accelerators, tests) exists to run fast.
+ * ==========================================================================
+ */
+
 // TinyFormer encoder block implementation for RV32IM bare‑metal.
 //
 // Constraints:
@@ -363,6 +379,9 @@ static void attention_single_head(
         for (d = 0; d < TINYFORMER_D; ++d) {
             int32_t acc = 0;
             for (j = 0; j < TINYFORMER_S; ++j) {
+                /* SIMPLE WORDS: exp[j] / sum = snapshot j's SHARE of the
+                 * attention (all 16 shares sum to ~100%), held as a Q15
+                 * fixed-point fraction. Multiply by V and >>15 to blend. */
                 uint16_t w_q15 = (uint16_t)(((uint32_t)exp_buf[j] << 15) / sum_exp);
                 acc += ((int32_t)w_q15 * (int32_t)v[j][d]) >> 15;
             }
@@ -423,6 +442,8 @@ void tinyformer_encode(
     linear_projection_all(attn_out, q_buf, W_o, b_o);
     for (s = 0; s < TINYFORMER_S; ++s) {
         for (d = 0; d < TINYFORMER_D; ++d) {
+            /* SIMPLE WORDS - RESIDUAL #1: add the ORIGINAL input back on top
+             * of the attention result ('improve, don't overwrite'). */
             int32_t acc = (int32_t)input[s][d] + (int32_t)q_buf[s][d];
             attn_out[s][d] = saturate_int32_to_int8(acc);
         }
@@ -434,6 +455,8 @@ void tinyformer_encode(
 
     for (s = 0; s < TINYFORMER_S; ++s) {
         for (d = 0; d < TINYFORMER_D; ++d) {
+            /* SIMPLE WORDS - RESIDUAL #2: add the pre-FFN version back on top
+             * of the FFN result. This sum is the encoder's final output. */
             int32_t acc = (int32_t)attn_out[s][d] + (int32_t)ffn_out[s][d];
             output[s][d] = saturate_int32_to_int8(acc);
         }

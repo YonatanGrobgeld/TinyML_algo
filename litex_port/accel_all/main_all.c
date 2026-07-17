@@ -1,3 +1,14 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Entry point of the FULLY ACCELERATED build (DOT8 + EXP-LUT + GEMV) - the 157.55 ms,
+ *  4.82x mode. Same structure as the baseline main: waits for 's', times demo_run() with
+ *  timer0, prints CYCLES= and TIME_US=. Built with all three USE_*_HW macros.
+ *  Its ENC_CKSUM lines must match the baseline exactly - that is the correctness proof.
+ *  BIG PICTURE: The headline-number build of the whole project.
+ * ==========================================================================
+ */
+
 // TinyFormer with all accelerators: DOT8 + LUT + GEMV.
 // Build with -DUSE_DOT8_HW -DUSE_EXP_LUT_HW -DUSE_GEMV_HW; link all drivers.
 
@@ -30,6 +41,10 @@ int main(void) {
     if (c == 's') {
       uint32_t sys_clk_freq = CONFIG_CLOCK_FREQUENCY;
 
+      /* SIMPLE WORDS - the stopwatch: load the hardware timer with the max
+       * value, let it count DOWN at 100 MHz, read it before and after the
+       * demo; the difference = exact clock cycles used. Trusted over PC
+       * wall-clock because the serial link can drop bytes. */
       timer0_en_write(0);
       timer0_load_write(0xFFFFFFFF);
       timer0_reload_write(0xFFFFFFFF);

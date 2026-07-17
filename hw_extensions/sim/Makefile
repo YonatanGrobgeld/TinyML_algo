@@ -1,3 +1,9 @@
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Build/run recipe for the two RTL simulations (tb_gemv, tb_lut).
+#  BIG PICTURE: Automation for the simulation step.
+# ==========================================================================
+
 # Simple simulation Makefile for standalone SV testbenches.
 #
 # Supports:

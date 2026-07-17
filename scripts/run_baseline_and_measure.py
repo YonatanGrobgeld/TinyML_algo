@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Host-side MEASUREMENT script: opens the serial port, sends 's' to trigger runs,
+#  parses the ENC_CKSUM / CYCLES / TIME_US lines the firmware prints, repeats N times,
+#  and writes a CSV. Reports the firmware's own hardware-timer number as the truth
+#  (Python wall-clock is kept only for transparency - pyserial can drop bytes).
+#  BIG PICTURE: How the 759.00 ms / 157.55 ms numbers were actually collected.
+# ==========================================================================
+
 """
 Enhanced FPGA Baseline Measurement Script with Comprehensive UART Debugging
 

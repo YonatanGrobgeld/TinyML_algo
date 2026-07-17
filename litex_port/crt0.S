@@ -1,3 +1,13 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The VERY FIRST code the CPU runs after reset, in RISC-V assembly. It sets up the stack
+ *  pointer, installs the trap/interrupt entry (which saves registers, calls isr(), and
+ *  restores them), prepares memory, and finally jumps to main(). Standard LiteX startup.
+ *  BIG PICTURE: The bridge between 'power on' and the C world.
+ * ==========================================================================
+ */
+
 .global main
 .global isr
 .global _start

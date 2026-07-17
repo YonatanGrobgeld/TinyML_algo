@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Minimal LiteX-style interrupt helper header (enable/disable/mask). Barely used -
+ *  this firmware polls instead of using interrupts.
+ *  BIG PICTURE: Plumbing for completeness.
+ * ==========================================================================
+ */
+
 #pragma once
 #include_next<irq.h>
 

@@ -1,3 +1,9 @@
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Auto-generated Makefile variables (toolchain, paths, CPU flags) - sample copy.
+#  BIG PICTURE: Build plumbing.
+# ==========================================================================
+
 PACKAGES=libc libcompiler_rt libbase libfatfs liblitespi liblitedram libliteeth liblitesdcard liblitesata bios
 PACKAGE_DIRS=/home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/libc /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/libcompiler_rt /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/libbase /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/libfatfs /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/liblitespi /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/liblitedram /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/libliteeth /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/liblitesdcard /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/liblitesata /home/yonatang/.local/lib/python3.10/site-packages/litex/soc/software/bios
 LIBS=libc libcompiler_rt libbase libfatfs liblitespi liblitedram libliteeth liblitesdcard liblitesata

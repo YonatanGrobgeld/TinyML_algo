@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Header declaring the trained weight arrays defined in trained_weights.c
+ *  (auto-generated together with it).
+ *  BIG PICTURE: Included by tinyformer.c when USE_TRAINED_WEIGHTS=1.
+ * ==========================================================================
+ */
+
 #ifndef TRAINED_WEIGHTS_H
 #define TRAINED_WEIGHTS_H
 

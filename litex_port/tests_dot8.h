@@ -1,4 +1,12 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Header declaring test_dot8().
+ *  BIG PICTURE: Run before trusting/benchmarking DOT8.
+ * ==========================================================================
+ */
+
+/*
  * DOT8 on-target self-test.
  * Link with code that provides uart_write_char (e.g. uart_litex.c).
  * Returns 0 on PASS, nonzero on FAIL.

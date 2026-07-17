@@ -1,3 +1,16 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The DEMO LOOP - how the brain is actually used. For each of the 10 built-in test
+ *  recordings it: (1) runs tinyformer_encode(), (2) adds all 512 output numbers into one
+ *  'fingerprint' and prints ENC_CKSUM=0x... (the correctness proof: baseline and accelerated
+ *  builds must print IDENTICAL fingerprints), (3) averages the 16 snapshots into one
+ *  32-number summary (mean-pool), (4) scores the 6 activities with the classifier and
+ *  prints 'Sample i: pred=X exp=Y' (predicted vs expected activity) over the serial cable.
+ *  BIG PICTURE: Turns the encoder's raw output into an activity guess + the famous ENC_CKSUM checksum.
+ * ==========================================================================
+ */
+
 // Shared demo flow implementation.
 // Uses tinyformer_encode(), demo samples, classifier; prints via uart_litex.
 
@@ -48,6 +61,9 @@ static int8_t saturate_int32_to_int8(int32_t x) {
   return (int8_t)x;
 }
 
+/* SIMPLE WORDS: squash the 16 snapshots into ONE 32-number summary by
+ * averaging each feature over time (with rounding). The classifier needs a
+ * single vector, not a sequence. */
 static void mean_pool_tokens(const int8_t tokens[TINYFORMER_S][TINYFORMER_D],
                              int8_t pooled[TINYFORMER_D]) {
   for (int d = 0; d < TINYFORMER_D; ++d) {
@@ -60,6 +76,8 @@ static void mean_pool_tokens(const int8_t tokens[TINYFORMER_S][TINYFORMER_D],
   }
 }
 
+/* SIMPLE WORDS: give each of the 6 activities a score = weighted sum of the
+ * 32 summary numbers (one weight row per activity, learned in training). */
 static void classifier_forward(const int8_t pooled[TINYFORMER_D],
                                int32_t logits[DEMO_NUM_CLASSES]) {
   for (int c = 0; c < DEMO_NUM_CLASSES; ++c) {
@@ -83,6 +101,10 @@ void demo_run(void) {
     /* Shared correctness checksum: must match baseline and all accelerated
      * modes. */
     {
+      /* SIMPLE WORDS: add all 512 output numbers into one 'fingerprint'.
+       * Baseline and every accelerated build MUST print the same fingerprint
+       * for the same sample - this ENC_CKSUM is the project's proof that the
+       * hardware accelerators do not change the results, only the speed. */
       uint32_t cksum = 0;
       for (int s = 0; s < TINYFORMER_S; ++s) {
         for (int d = 0; d < TINYFORMER_D; ++d) {
@@ -97,6 +119,8 @@ void demo_run(void) {
     mean_pool_tokens(encoded, pooled);
     classifier_forward(pooled, logits);
 
+    /* SIMPLE WORDS: pick the activity with the highest score - that is the
+     * prediction ('pred'); 'exp' is the true label stored with the sample. */
     int32_t best_val = logits[0];
     uint32_t best_idx = 0;
     for (uint32_t c = 1; c < (uint32_t)DEMO_NUM_CLASSES; ++c) {

@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Header declaring the classifier weights (cls_W[6][32], cls_b[6]) and the
+ *  number of classes.
+ *  BIG PICTURE: Included by the demo runner.
+ * ==========================================================================
+ */
+
 #ifndef DEMO_CLASSIFIER_H
 #define DEMO_CLASSIFIER_H
 

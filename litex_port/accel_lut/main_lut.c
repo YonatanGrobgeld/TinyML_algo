@@ -1,3 +1,13 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Entry point of the EXP-LUT-only build: compiled with -DUSE_EXP_LUT_HW so softmax exp()
+ *  comes from the hardware lookup table instead of the slow software loop.
+ *  Prints 'MODE: LUT'.
+ *  BIG PICTURE: Isolates the biggest single win (softmax was 71% of baseline time).
+ * ==========================================================================
+ */
+
 // TinyFormer with Exp LUT hardware only.
 // Build with -DUSE_EXP_LUT_HW; link with hw_extensions/exp_lut/sw as needed.
 

@@ -1,3 +1,10 @@
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Vivado Tcl script: compiles gemv_core.v + tb_gemv.sv and runs the GEMV simulation
+#  (source run_gemv_xsim.tcl from the Vivado Tcl console).
+#  BIG PICTURE: One-command entry to the GEMV RTL test.
+# ==========================================================================
+
 # Vivado 2025.2 xsim script for GEMV core testbench.
 
 # Compile DUT (gemv_core) first

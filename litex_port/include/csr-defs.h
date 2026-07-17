@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Minimal LiteX-style system header: constants for CSR (control/status register) access
+ *  used by generated headers. Vendored so the firmware compiles outside a LiteX tree.
+ *  BIG PICTURE: Plumbing so #include <generated/csr.h> works.
+ * ==========================================================================
+ */
+
 #ifndef CSR_DEFS__H
 #define CSR_DEFS__H
 

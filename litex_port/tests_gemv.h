@@ -1,4 +1,12 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Header declaring test_gemv().
+ *  BIG PICTURE: Run before trusting/benchmarking GEMV.
+ * ==========================================================================
+ */
+
+/*
  * GEMV accelerator on-target self-test.
  *
  * Link with code that provides uart_write_char(char) (e.g. uart_litex.c or main stub).

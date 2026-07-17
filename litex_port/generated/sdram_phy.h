@@ -1,3 +1,11 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Auto-generated DDR2 SDRAM initialization sequence for this board - sample copy.
+ *  BIG PICTURE: Needed so main RAM works before firmware runs from it.
+ * ==========================================================================
+ */
+
 #ifndef __GENERATED_SDRAM_PHY_H
 #define __GENERATED_SDRAM_PHY_H
 

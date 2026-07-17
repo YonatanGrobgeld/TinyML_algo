@@ -1,3 +1,13 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  An earlier ALL-IN-ONE demo main (encoder + mean-pool + classifier + printing in one
+ *  file), before that logic was split into common/demo_runner.c shared by all modes.
+ *  BIG PICTURE: Superseded by common/demo_runner.c + the tiny per-mode mains.
+ * ==========================================================================
+ */
+
 // Demo main for TinyFormer + UCI HAR on LiteX / VexRiscv.
 //
 // This program iterates over a small set of pre-quantized demo samples

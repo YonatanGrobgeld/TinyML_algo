@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Debug helper that exercises the serial link (ports, baud, timing) to diagnose
+#  communication problems between the PC and the board.
+#  BIG PICTURE: Used when measurements looked unreliable.
+# ==========================================================================
+
 """
 UART Diagnostic Tool for FPGA Communication Debugging
 

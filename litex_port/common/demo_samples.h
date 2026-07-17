@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Header for the demo samples: sizes (10 samples, 6 classes) and the
+ *  demo_inputs / demo_labels array declarations.
+ *  BIG PICTURE: Included by the demo runner.
+ * ==========================================================================
+ */
+
 #ifndef DEMO_SAMPLES_H
 #define DEMO_SAMPLES_H
 

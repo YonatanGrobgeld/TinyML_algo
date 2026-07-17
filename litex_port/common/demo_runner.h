@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Tiny header declaring the two demo functions: demo_print_banner() (print the MODE
+ *  line) and demo_run() (run the 10-sample demo loop in demo_runner.c).
+ *  BIG PICTURE: Lets each mode's main.c call the shared demo without copying code.
+ * ==========================================================================
+ */
+
 // Shared demo flow: load samples, run tinyformer_encode(), classify, print pred/exp.
 // Used by all baseline and accelerated main_*.c variants.
 

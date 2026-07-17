@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  STEP 1 of the host-side pipeline: downloads the UCI HAR dataset (raw phone
+#  accelerometer + gyroscope recordings of 30 people doing 6 activities) and unzips it
+#  into data/uci_har_raw/.
+#  BIG PICTURE: Gets the raw sensor data everything is trained on.
+# ==========================================================================
+
 """
 Download the UCI HAR Dataset (raw IMU signals) into data/uci_har_raw/.
 

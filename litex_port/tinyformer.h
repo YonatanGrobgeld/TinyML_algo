@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  Header for the flat-layout encoder.
+ *  BIG PICTURE: See common/tinyformer.h.
+ * ==========================================================================
+ */
+
 // TinyFormer encoder for RV32IM bare‑metal (LiteX / VexRiscv)
 // Portable C API, no dynamic allocation, fixed shapes.
 //

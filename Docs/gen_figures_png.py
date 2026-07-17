@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Helper that rendered the report figures to PNG.
+#  BIG PICTURE: Report tooling.
+# ==========================================================================
+
 """Render publication-quality figures (1-9) for the TinyFormer report as PNGs."""
 import os
 import matplotlib

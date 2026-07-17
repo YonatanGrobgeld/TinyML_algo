@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  STEP 2: turns raw recordings (6 channels x 128 timesteps) into TinyFormer-shaped data:
+#  average-pool 128 -> 16 timesteps (S=16); build a 32-number feature vector per timestep
+#  (6 raw signals, 2 magnitudes, 6 deltas, rest zero-padded so D=32 - a multiple of 4 for
+#  the hardware and a power of 2 for the shifts); z-score normalize; labels 1-6 -> 0-5.
+#  Saves everything as data/uci_har_processed/uci_har_processed.npz with shape [N,16,32].
+#  BIG PICTURE: Shapes the data to EXACTLY what the C code and hardware expect.
+# ==========================================================================
+
 """
 Preprocess UCI HAR raw inertial signals into TinyFormer-ready tensors.
 

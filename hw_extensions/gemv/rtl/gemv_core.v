@@ -1,4 +1,18 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The MATRIX ENGINE (v2) in Verilog: computes Y = W*X + b for int8 matrix/vector with
+ *  32 or 64 dimensions. The CPU first streams X, W, b into internal memories (4 packed
+ *  int8 values per 32-bit write - 4x fewer bus writes than v1), then pulses 'start'.
+ *  A 3-state machine (IDLE -> COMPUTE -> DONE) then does 4 multiplies+adds PER CLOCK
+ *  (the 'dot4' 4-lane MAC - 4x faster than v1's one-per-clock), row by row, and raises
+ *  'done'. The CPU reads results one at a time via Y_OUT, poking Y_NEXT to advance.
+ *  The two 4x wins (bus + compute) are independent and multiply.
+ *  BIG PICTURE: The hardware that removed the 21% matvec bottleneck; 32x32 matvec in ~256 compute cycles.
+ * ==========================================================================
+ */
+
+/*
  * GEMV core v2: Y = W * X + b (optional).
  * int8 W, X; int32 b, Y.  LEN and OUT_DIM = 32 or 64.
  *
@@ -65,7 +79,11 @@ module gemv_core #(
     assign LEN_WORDS = len_64     ? 16 : 8;
     assign OUT_DIM   = out_dim_64 ? 64 : 32;
 
-    /* FSM */
+    /* FSM - SIMPLE WORDS: a 3-step state machine.
+     * S_IDLE   : wait for the CPU's 'start'; preload the total with row 0's bias.
+     * S_COMPUTE: for each output row, eat LEN/4 packed words (one dot4 per
+     *            clock), then store the finished total into y_mem[row].
+     * S_DONE   : raise 'done' and wait for the CPU to read Y and clear us. */
     localparam [2:0] S_IDLE    = 3'd0,
                      S_COMPUTE = 3'd1,
                      S_DONE    = 3'd2;
@@ -85,6 +103,9 @@ module gemv_core #(
     /* 4-lane parallel signed dot product on the fetched X word and W word */
     wire [31:0] x_word = x_mem[col[LEN_WBITS-1:0]];
     wire [31:0] w_word = w_mem[w_addr];
+    /* SIMPLE WORDS: the heart of the engine - take one packed X word and one
+     * packed W word (4 int8 values each), do 4 multiplies and add them, all
+     * inside ONE clock cycle. This is the '4-lane MAC' (uses 4 DSP blocks). */
     wire signed [31:0] dot4 =
           ($signed(x_word[ 7: 0]) * $signed(w_word[ 7: 0]))
         + ($signed(x_word[15: 8]) * $signed(w_word[15: 8]))
@@ -93,7 +114,9 @@ module gemv_core #(
 
     assign y_rd_data = y_mem[y_rd_idx];
 
-    /* --- Write path: X, W (packed 32-bit), B (32-bit) --- */
+    /* --- Write path: X, W (packed 32-bit), B (32-bit) ---
+     * SIMPLE WORDS: every CPU write lands at an auto-incrementing position,
+     * so the CPU just streams values in order - no addresses needed. */
     always @(posedge clk) begin
         if (reset || clear_done) begin
             x_wr_idx <= 0;

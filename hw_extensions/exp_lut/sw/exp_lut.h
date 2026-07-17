@@ -1,4 +1,13 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  C-side interface for the exp lookup: exp_lut_hw(idx) returns exp(-idx) in Q10
+ *  for idx 0..15.
+ *  BIG PICTURE: One tiny function the softmax calls 2560 times per inference.
+ * ==========================================================================
+ */
+
+/*
  * Exp LUT — softmax helper (Q10, index 0..15 = exp(0)..exp(-15)).
  * Defining USE_EXP_LUT_HW requires the SoC to include the corresponding HW block; otherwise keep macro off.
  * When USE_EXP_LUT_HW: read from MMIO (write index, read value).

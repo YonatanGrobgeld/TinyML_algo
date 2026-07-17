@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  The QUANTIZER: loads the float PyTorch weights, scales and clips each tensor to signed
+#  int8 (symmetric, [-127,127]), and writes them as C arrays in the exact row-major layout
+#  tinyformer.c expects (trained_weights.h/.c).
+#  BIG PICTURE: Where float knowledge becomes whole-number knowledge.
+# ==========================================================================
+
 """
 Export trained TinyFormer encoder weights to C int8_t arrays for litex_port/tinyformer.c.
 

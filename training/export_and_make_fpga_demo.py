@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  STEP 4: the bridge from PyTorch to C. Runs tools/export_weights.py to quantize the
+#  trained weights to int8 C arrays (trained_weights.c/h), picks 10 test samples and
+#  quantizes them (demo_samples.c/h), and exports the classifier head (demo_classifier.c/h).
+#  After this, the firmware can be rebuilt with real intelligence baked in.
+#  BIG PICTURE: Produces the three auto-generated C file pairs the firmware compiles in.
+# ==========================================================================
+
 """
 Export trained TinyFormer weights and generate FPGA demo samples.
 

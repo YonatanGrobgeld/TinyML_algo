@@ -1,4 +1,14 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Driver for the exp lookup with the golden table built in. With USE_EXP_LUT_HW it does
+ *  2 bus operations (write index, read value, ~12 cycles); without it, it returns the same
+ *  value from the identical software table - so tests can run with no hardware present.
+ *  BIG PICTURE: Same answers either way; only the speed changes.
+ * ==========================================================================
+ */
+
+/*
  * Exp LUT driver. Golden table matches litex_port/tinyformer.c exp_lut[16] (Q10).
  * Defining USE_EXP_LUT_HW requires the SoC to include the corresponding HW block; otherwise keep macro off.
  * USE_EXP_LUT_HW: use MMIO. EXP_LUT_USE_LITEX_CSR + generated/csr.h, or EXP_LUT_BASE for raw MMIO.
@@ -19,6 +29,8 @@ uint16_t exp_lut_hw(unsigned idx)
 #if defined(USE_EXP_LUT_HW)
     if (idx > 15u) return exp_lut_golden[15];
 #  if defined(EXP_LUT_USE_LITEX_CSR)
+    /* SIMPLE WORDS: write the question (index), read the answer (value) -
+     * 2 bus operations, ~12 cycles, vs ~21,000 cycles for the software exp(). */
     exp_lut_index_write((uint32_t)idx);
     return (uint16_t)exp_lut_value_read();
 #  else
