@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Helper that converted Project_Report.md into Project_Report.docx.
+#  BIG PICTURE: Report tooling.
+# ==========================================================================
+
 """Convert Project_Report.md into a styled Word .docx.
 
 Figure/graph ASCII blocks are replaced by a bold TBD placeholder plus a

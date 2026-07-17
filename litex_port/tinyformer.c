@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  Same purpose as common/tinyformer.c: the TinyFormer encoder algorithm in C.
+ *  BIG PICTURE: Study the common/ version; this one is kept for reference/history.
+ * ==========================================================================
+ */
+
 // TinyFormer encoder block implementation for RV32IM bare‑metal.
 //
 // Constraints:

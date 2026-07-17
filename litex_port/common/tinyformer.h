@@ -1,3 +1,13 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The public 'front door' of the TinyFormer brain: fixes the model sizes
+ *  (S=16 snapshots, D=32 numbers each, FFN=64 hidden) and declares the one
+ *  function everyone calls: tinyformer_encode(input, output).
+ *  BIG PICTURE: Any file that wants to run the model includes this header.
+ * ==========================================================================
+ */
+
 // TinyFormer encoder for RV32IM bare‑metal (LiteX / VexRiscv)
 // Portable C API, no dynamic allocation, fixed shapes.
 //

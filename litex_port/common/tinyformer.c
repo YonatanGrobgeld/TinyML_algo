@@ -1,3 +1,19 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  This is the BRAIN of the project: the TinyFormer neural network itself, written in C.
+ *  It takes one recording (16 snapshots x 32 numbers, all small int8 integers) and runs the
+ *  4 encoder stages: (1) build Q/K/V versions of each snapshot, (2) ATTENTION - each snapshot
+ *  blends in the other snapshots that matter to it, (3) output projection + 'add the original
+ *  back' (residual), (4) a small 2-layer FFN + a second residual.
+ *  All math is whole-number (int8 data, int32 running totals, >> shifts instead of division).
+ *  The #ifdef USE_DOT8_HW / USE_EXP_LUT_HW / USE_GEMV_HW switches pick, at compile time,
+ *  whether each heavy step runs in plain software (baseline) or on a hardware accelerator.
+ *  SAME FILE serves both the 759 ms baseline and the 157 ms accelerated build.
+ *  BIG PICTURE: The algorithm that everything else (training, drivers, accelerators, tests) exists to run fast.
+ * ==========================================================================
+ */
+
 // TinyFormer encoder block implementation for RV32IM bare‑metal.
 //
 // Constraints:
@@ -9,6 +25,8 @@
 //  - No dynamic allocation, no OS, no threads, no SIMD, no PULP intrinsics
 //
 // This file is intentionally self‑contained and uses only fixed‑size arrays.
+
+// SECTION 1 : which hardware do I have?
 
 #include "tinyformer.h"
 
@@ -27,6 +45,11 @@
 #define USE_TRAINED_WEIGHTS 0
 #endif
 
+
+// SECTRION 2 : The wegiths - The model's "knowledge" is a big pile of fixed numbers 
+//(the weight grids W_q, W_k, ... and biases b_q, ...). #if USE_TRAINED_WEIGHTS says:
+//"if we're using the real trained numbers, load them from the other file; otherwise fill everything with zeros as a placeholder."
+//On the real FPGA build it uses the trained ones. static const just means "these never change and are private to this file."
 #if USE_TRAINED_WEIGHTS
 #include "trained_weights.h"
 #else
@@ -56,8 +79,14 @@ static const int8_t b_ff2[TINYFORMER_D] = { 0 };
 
 #endif  // USE_TRAINED_WEIGHTS
 
-// --- Helper macros for saturation ---
 
+// SECTION 3: The "shrink and clamp" helper 
+// --- Helper macros for saturation ---
+// Small numbers only go from −128 to 127. 
+// After the code adds up a big total, that total might be, say, 5000 — too big to fit.
+// This recipe forces it back into range: anything over 127 becomes 127, anything under −128 becomes −128. It's called saturation (like a volume knob that can't go past max).
+// You'll see this called at the end of almost every step.
+//Bucket: it's the "shrink-and-store" guardrail.
 static int8_t saturate_int32_to_int8(int32_t x)
 {
     if (x > 127) return 127;
@@ -68,9 +97,12 @@ static int8_t saturate_int32_to_int8(int32_t x)
 // --- Internal working buffers (global, not on stack) ----------------------
 // Layout: [S][D] or [S][FFN] as specified.
 
-static int8_t q_buf[TINYFORMER_S][TINYFORMER_D];
-static int8_t k_buf[TINYFORMER_S][TINYFORMER_D];
-static int8_t v_buf[TINYFORMER_S][TINYFORMER_D];
+// SECTION 4: The scratch paper (working buffers)
+// These are empty grids the code fills in as it works .
+// 16 snapshots (16 rows x 32 numbers)
+static int8_t q_buf[TINYFORMER_S][TINYFORMER_D]; // hold Query
+static int8_t k_buf[TINYFORMER_S][TINYFORMER_D]; // hold Key
+static int8_t v_buf[TINYFORMER_S][TINYFORMER_D]; // hold Value
 
 static int8_t attn_out[TINYFORMER_S][TINYFORMER_D];     // after attention + output proj
 static int8_t ffn_hidden[TINYFORMER_S][TINYFORMER_FFN]; // after first FFN layer (ReLU)
@@ -128,8 +160,13 @@ static uint16_t exp_buf[TINYFORMER_S];  // approximate exp values for softmax
  * empirically optimised those smaller-N versions; only N≥1000 of this
  * exact structure consistently slows the baseline.  So we accept the
  * dramatic 4.8× speedup vs accel_all v2 as the headline number.) */
+
+// SECTION 5 : The exponential (the softmax helper)  
+// softmax - "turn scores into precentages". 
+// part of that needs th exp funtcion - this section provides it.
+// There are 2 versions _ This one is the baseline
 __attribute__((noinline,optimize("O0")))
-static uint16_t compute_exp_q10(unsigned neg_idx)
+static uint16_t compute_exp_q10(unsigned neg_idx)  
 {
     /* NOTE: no early-return for neg_idx == 0.  With the trained weights,
      * the attention scores are nearly uniform so neg_idx is 0 the vast
@@ -160,7 +197,9 @@ static uint16_t compute_exp_q10(unsigned neg_idx)
 
 // Convert a scaled score to an exp value (Q10 fixed-point).
 // Input: int16_t x, we clamp x to [-15, 0] and pass -x as the index.
-static uint16_t score_to_exp(int16_t x)
+
+// here is the version with the accelerator 
+static uint16_t score_to_exp(int16_t x) // keep the value in range clamps the input to the range [-15,0] 
 {
     if (x > 0) {
         x = 0;
@@ -169,12 +208,12 @@ static uint16_t score_to_exp(int16_t x)
     }
 #ifdef USE_EXP_LUT_HW
     /* Accelerated path: one MMIO write + one MMIO read (~12 cycles). */
-    return exp_lut_hw((unsigned)(-x));
+    return exp_lut_hw((unsigned)(-x)); // FAST: ask the hardware chip
 #else
     /* Baseline path: actual fixed-point exp() — no lookup table, no
      * precomputed array. ~1500 cycles per call, called 2560 times per
      * inference. */
-    return compute_exp_q10((unsigned)(-x));
+    return compute_exp_q10((unsigned)(-x)); // slow - compute it here
 #endif
 }
 
@@ -186,6 +225,10 @@ static uint16_t score_to_exp(int16_t x)
 //   in:  [D]
 //   out: [D_out]
 //   W:   [D_out][D]
+
+// SECTION 6: The workhorse on snapshot times one weight grid
+// to make each output number, multiply every input by its weight, add them all up,
+// then shrink the total back down
 static void matvec_i8_i32_acc(
     const int8_t *in,
     int8_t       *out,
@@ -199,7 +242,7 @@ static void matvec_i8_i32_acc(
     static int32_t b32[TINYFORMER_FFN];  /* max bias dim = FFN = 64 */
     static int32_t y32[TINYFORMER_FFN];  /* max output dim */
     int32_t i;
-    for (i = 0; i < d_out; i++) b32[i] = (int32_t)b[i];
+    for (i = 0; i < d_out; i++) b32[i] = (int32_t)b[i]; 
     gemv_clear_done();
     gemv_load_x(in, (int)d_in);
     gemv_load_w(W, (int)d_out, (int)d_in);
@@ -211,22 +254,24 @@ static void matvec_i8_i32_acc(
         out[i] = saturate_int32_to_int8(y32[i] >> 7);
 #else
     int32_t od, id;
-    for (od = 0; od < d_out; ++od) {
-        const int8_t *w_row = &W[od * d_in];
-        int32_t acc = (int32_t)b[od];
+    for (od = 0; od < d_out; ++od) {  // for each output number
+        const int8_t *w_row = &W[od * d_in]; // point at this outpu's row of weights
+        int32_t acc = (int32_t)b[od]; // total starts at the bias
 #ifdef USE_DOT8_HW
         /* DOT8 path: process 4 lanes at a time (d_in is always 32 or 64). */
-        for (id = 0; id < d_in; id += 4)
-            acc += dot8_4_lanes(dot8_pack(&in[id]), dot8_pack(&w_row[id]));
+        for (id = 0; id < d_in; id += 4) // for each input number
+            acc += dot8_4_lanes(dot8_pack(&in[id]), dot8_pack(&w_row[id])); 
 #else
-        for (id = 0; id < d_in; ++id)
-            acc += (int32_t)w_row[id] * (int32_t)in[id];
+        for (id = 0; id < d_in; ++id) // for each input number
+            acc += (int32_t)w_row[id] * (int32_t)in[id]; // mulyiply & pile onto total
 #endif
-        out[od] = saturate_int32_to_int8(acc >> 7);
+        out[od] = saturate_int32_to_int8(acc >> 7); // shrink , clamp and store
     }
 #endif
 }
 
+//SECTION 7: do it for all 16 snapshots
+// matvec handles one snapshot , this part tuns it for all 16 .
 // Linear projection for all tokens:
 //   dst[s][D_out] = W[D_out][D_in] * src[s][D_in] + b[D_out]
 static void linear_projection_all(
@@ -236,7 +281,7 @@ static void linear_projection_all(
     const int8_t b[TINYFORMER_D])
 {
     int32_t s;
-    for (s = 0; s < TINYFORMER_S; ++s) {
+    for (s = 0; s < TINYFORMER_S; ++s) { // for each 16 snapshots, run the multiply add recipe and scroe the result in dst
         matvec_i8_i32_acc(
             &src[s][0],
             &dst[s][0],
@@ -247,6 +292,10 @@ static void linear_projection_all(
     }
 }
 
+
+//SECTION 8: the meeting
+// This is the big one - the snapshots talk to each other step.
+// It's one loop over the 16 queries [i] and indside are three sub steps
 // --- Scaled dot‑product attention (streaming) -----------------------------
 //
 // For each query position i:
@@ -257,6 +306,10 @@ static void linear_projection_all(
 //
 // We never allocate an SxS matrix; we reuse the 1D scores/exp_buf arrays.
 
+// 8.1 - Score this snapshot against all others
+// For query snapshot i, this loops over all snapshots j, 
+//and measures the match between i's Query and j's Key (multiply-add again — a big match = a big number). 
+//It saves all 16 scores and notes the largest one.
 static void attention_single_head(
     const int8_t q[TINYFORMER_S][TINYFORMER_D],
     const int8_t k[TINYFORMER_S][TINYFORMER_D],
@@ -266,7 +319,7 @@ static void attention_single_head(
     int32_t i, j, d;
 
     // For each sequence position i (query index)
-    for (i = 0; i < TINYFORMER_S; ++i) {
+    for (i = 0; i < TINYFORMER_S; ++i) { // compare snapshot i against every snapshot j 
         // 1. Compute raw dot‑product scores with all keys.
         int32_t max_score = -2147483647;
         for (j = 0; j < TINYFORMER_S; ++j) {
@@ -276,33 +329,40 @@ static void attention_single_head(
                 acc += dot8_4_lanes(dot8_pack(&q[i][d]), dot8_pack(&k[j][d]));
 #else
             for (d = 0; d < TINYFORMER_D; ++d)
-                acc += (int32_t)q[i][d] * (int32_t)k[j][d];
+                acc += (int32_t)q[i][d] * (int32_t)k[j][d]; // how well does i's Query match j's Key?
 #endif
 
             // Approximate scaling by 1/sqrt(D) ≈ 1/6 using a shift.
             // With D=32, scores can be large; we right‑shift by 5 bits
             // to reduce magnitude before softmax (empirical choice).
-            acc >>= 5;
+            acc >>= 5; // scale the score
 
-            scores[j] = acc;
-            if (acc > max_score) {
-                max_score = acc;
+            scores[j] = acc; // remember the score
+            if (acc > max_score) { // track the biggest score
+                max_score = acc; 
             }
         }
 
         // 2. Subtract max for numerical stability, convert to small range
         //    and look up approximate exp values.
+
+        // 8.2 Turn scroes into exp values and total them 
+        // Subtract the max (a safety trick so numbers don't explode),
+        // squeeze the range, run each through exp, and keep a sum_exp total.
+        // After this, exp_buf holds 16 values and sum_exp is their sum —
+        // everything we need to make percentages.
+        
         uint32_t sum_exp = 0;
         for (j = 0; j < TINYFORMER_S; ++j) {
-            int32_t shifted = scores[j] - max_score; // <= 0
+            int32_t shifted = scores[j] - max_score; // <= 0 // subtract the biggest (keeps numbers safe)
 
             // Further compress dynamic range to int16 by shifting.
             // This keeps values in a rough [-32, 0] range typically.
-            int16_t scaled = (int16_t)(shifted >> 3);
+            int16_t scaled = (int16_t)(shifted >> 3); // squeeze into range
 
-            uint16_t e = score_to_exp(scaled);
-            exp_buf[j] = e;
-            sum_exp += (uint32_t)e;
+            uint16_t e = score_to_exp(scaled); // exp lookup (SECTION 5)
+            exp_buf[j] = e; // save it
+            sum_exp += (uint32_t)e; // add to the running total
         }
 
         // Guard against division by zero (degenerate case).
@@ -310,7 +370,7 @@ static void attention_single_head(
             sum_exp = 1u;
         }
 
-        // 3. Compute context[i][d] = sum_j softmax_ij * V[j][d]
+        // 8.3. Compute context[i][d] = sum_j softmax_ij * V[j][d]
         //    We represent softmax_ij as Q15 fixed‑point:
         //      w_ij_q15 = (exp_buf[j] << 15) / sum_exp
         //    and then:
@@ -319,6 +379,9 @@ static void attention_single_head(
         for (d = 0; d < TINYFORMER_D; ++d) {
             int32_t acc = 0;
             for (j = 0; j < TINYFORMER_S; ++j) {
+                /* SIMPLE WORDS: exp[j] / sum = snapshot j's SHARE of the
+                 * attention (all 16 shares sum to ~100%), held as a Q15
+                 * fixed-point fraction. Multiply by V and >>15 to blend. */
                 uint16_t w_q15 = (uint16_t)(((uint32_t)exp_buf[j] << 15) / sum_exp);
                 acc += ((int32_t)w_q15 * (int32_t)v[j][d]) >> 15;
             }
@@ -340,22 +403,23 @@ static void ffn_apply(
 {
     int32_t s, d;
 
-    // First layer: W_ff1[FFN][D] * in[s] + b_ff1 -> hidden[s], then ReLU
+    // First layer: W_ff1[FFN][D] * in[s] + b_ff1 -> hidden[s], then ReLU - replace any negative number with zero.
     for (s = 0; s < TINYFORMER_S; ++s) {
-        matvec_i8_i32_acc(&in[s][0], &hidden[s][0], &W_ff1[0][0], b_ff1,
+        matvec_i8_i32_acc(&in[s][0], &hidden[s][0], &W_ff1[0][0], b_ff1, // 32 -> 64
                           TINYFORMER_D, TINYFORMER_FFN);
         for (d = 0; d < TINYFORMER_FFN; ++d)
-            if (hidden[s][d] < 0) hidden[s][d] = 0;
+            if (hidden[s][d] < 0) hidden[s][d] = 0; // ReLU: throw away negatives - replace with zero
     }
 
     // Second layer: W_ff2[D][FFN] * hidden[s] + b_ff2 -> out[s]
     for (s = 0; s < TINYFORMER_S; ++s)
-        matvec_i8_i32_acc(&hidden[s][0], &out[s][0], &W_ff2[0][0], b_ff2,
+        matvec_i8_i32_acc(&hidden[s][0], &out[s][0], &W_ff2[0][0], b_ff2, // 64 -> 32
                           TINYFORMER_FFN, TINYFORMER_D);
 }
 
 // --- Public entry point ---------------------------------------------------
-
+// SECTION 10: the conductior 
+// This is the publkic function that runs everything in order
 void tinyformer_encode(
     const int8_t input[TINYFORMER_S][TINYFORMER_D],
     int8_t       output[TINYFORMER_S][TINYFORMER_D])
@@ -363,11 +427,13 @@ void tinyformer_encode(
     int32_t s, d;
 
     // 1. Linear projections: Q = X * W_q, K = X * W_k, V = X * W_v
+    // Build Query , Key, Value from the input
     linear_projection_all(input, q_buf, W_q, b_q);
     linear_projection_all(input, k_buf, W_k, b_k);
     linear_projection_all(input, v_buf, W_v, b_v);
 
     // 2. Scaled dot‑product attention (streaming) to compute context.
+    // The meeting ( attention ) -> attn_out
     attention_single_head(q_buf, k_buf, v_buf, attn_out);
 
     // 3. Output projection + residual:
@@ -376,6 +442,8 @@ void tinyformer_encode(
     linear_projection_all(attn_out, q_buf, W_o, b_o);
     for (s = 0; s < TINYFORMER_S; ++s) {
         for (d = 0; d < TINYFORMER_D; ++d) {
+            /* SIMPLE WORDS - RESIDUAL #1: add the ORIGINAL input back on top
+             * of the attention result ('improve, don't overwrite'). */
             int32_t acc = (int32_t)input[s][d] + (int32_t)q_buf[s][d];
             attn_out[s][d] = saturate_int32_to_int8(acc);
         }
@@ -387,6 +455,8 @@ void tinyformer_encode(
 
     for (s = 0; s < TINYFORMER_S; ++s) {
         for (d = 0; d < TINYFORMER_D; ++d) {
+            /* SIMPLE WORDS - RESIDUAL #2: add the pre-FFN version back on top
+             * of the FFN result. This sum is the encoder's final output. */
             int32_t acc = (int32_t)attn_out[s][d] + (int32_t)ffn_out[s][d];
             output[s][d] = saturate_int32_to_int8(acc);
         }

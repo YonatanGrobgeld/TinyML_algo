@@ -1,4 +1,15 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  On-target SELF-TEST for the GEMV matrix engine: fills X and W with deterministic
+ *  pseudo-random int8 values, computes Y = W*X in plain C (the reference), then runs the
+ *  same job on the hardware and compares every output. Covers all 4 shapes (32/64 x 32/64).
+ *  Prints 'GEMV self-test PASS' or a detailed FAIL line over UART.
+ *  BIG PICTURE: Proves the matrix engine is bit-exact before it is used in the real model.
+ * ==========================================================================
+ */
+
+/*
  * GEMV on-target self-test: software reference GEMV vs hardware, compare Y.
  * Deterministic inputs (LCG). No printf/malloc; uses uart_write_char for output.
  *

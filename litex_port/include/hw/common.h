@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Minimal LiteX-style header with the low-level MMIO read/write helper functions
+ *  (csr_read_simple / csr_write_simple) that all generated CSR accessors use.
+ *  BIG PICTURE: The 'how do I poke a hardware register' primitives.
+ * ==========================================================================
+ */
+
 #ifndef __HW_COMMON_H
 #define __HW_COMMON_H
 

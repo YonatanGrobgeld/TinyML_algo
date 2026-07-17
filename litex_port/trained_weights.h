@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  Header for the older trained-weights copy.
+ *  BIG PICTURE: See common/trained_weights.h.
+ * ==========================================================================
+ */
+
 #ifndef TRAINED_WEIGHTS_H
 #define TRAINED_WEIGHTS_H
 

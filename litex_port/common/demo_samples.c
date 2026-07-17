@@ -1,3 +1,13 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The 10 TEST RECORDINGS burned into the firmware: demo_inputs[10][16][32] (pre-quantized
+ *  int8 sensor data) and demo_labels[10] (the correct activity for each). AUTO-GENERATED
+ *  by training/export_and_make_fpga_demo.py from real UCI HAR test samples.
+ *  BIG PICTURE: The fixed, deterministic inputs that make baseline-vs-accelerated comparison fair.
+ * ==========================================================================
+ */
+
 #include <stdint.h>
 #include "demo_samples.h"
 

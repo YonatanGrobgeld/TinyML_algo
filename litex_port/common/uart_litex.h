@@ -1,4 +1,13 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Header for the UART driver: declares uart_write_char / uart_write_string /
+ *  uart_read_char used by all printing code.
+ *  BIG PICTURE: The printing interface for the whole firmware.
+ * ==========================================================================
+ */
+
+/*
  * Minimal UART API for LiteX bare-metal firmware.
  *
  * When building with LiteX, add -DUSE_LITEX_UART and -I<path_to_generated>,

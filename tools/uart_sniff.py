@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Debug helper: passively listens on the serial port and shows every byte the board
+#  sends - used when UART output looked wrong or bytes went missing.
+#  BIG PICTURE: A microscope for the serial cable.
+# ==========================================================================
+
 """
 Quick UART sniffer for debugging serial communication.
 Listens to a serial port and prints everything received.

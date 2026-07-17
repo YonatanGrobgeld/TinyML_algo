@@ -1,4 +1,11 @@
 #!/bin/bash
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Helper shell script that prepares the build environment (paths/toolchain) before
+#  running the Makefile.
+#  BIG PICTURE: Convenience wrapper around the build.
+# ==========================================================================
+
 set -e
 
 # Define source paths

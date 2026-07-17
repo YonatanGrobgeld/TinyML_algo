@@ -1,4 +1,15 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  On-target SELF-TEST for the DOT8 instruction: generates ~1000 random 4-number vectors,
+ *  computes the dot-product the slow safe way in C, then asks dot8_4_lanes() (the hardware
+ *  instruction when USE_DOT8_HW is on), and compares. Any mismatch prints DOT8 FAIL with
+ *  details; success prints 'DOT8 PASS' over UART.
+ *  BIG PICTURE: Proves the custom instruction gives exactly the same answers as software.
+ * ==========================================================================
+ */
+
+/*
  * DOT8 on-target self-test: SW reference vs dot8_4_lanes (HW or SW).
  * Deterministic LCG; ~1000 iterations; UART on fail. No printf/libc.
  */

@@ -1,3 +1,9 @@
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Windows PowerShell helper that launches the Vivado xsim simulations.
+#  BIG PICTURE: Same as the Makefile, for Windows users.
+# ==========================================================================
+
 
 <#
 .SYNOPSIS

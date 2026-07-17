@@ -1,3 +1,14 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  The EARLIEST smoke-test main: fills the input with deterministic pseudo-random bytes,
+ *  runs the encoder once, and prints a checksum - used to prove the toolchain and encoder
+ *  run at all, before real weights/samples existed.
+ *  BIG PICTURE: Superseded by the mode mains + demo_runner.
+ * ==========================================================================
+ */
+
 // Bare‑metal entry point for TinyFormer on LiteX / VexRiscv.
 //
 // This file avoids any libc features (no malloc, no printf) and uses only

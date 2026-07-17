@@ -1,3 +1,11 @@
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Build recipe for the firmware: compiler (riscv gcc), flags (-march=rv32im -mabi=ilp32
+#  -O2 -ffreestanding -nostdlib), include paths, which .c files to compile per mode,
+#  and how to link them into firmware.elf/.bin.
+#  BIG PICTURE: Type 'make' here to produce the firmware image loaded onto the board.
+# ==========================================================================
+
 TARGET ?= baseline
 
 # MMIO bases for exp_lut / GEMV when not using LiteX CSR accessor names in generated/csr.h.

@@ -1,4 +1,14 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  C-side interface for the DOT8 instruction: dot8_pack() squeezes 4 int8 values into one
+ *  32-bit word, dot8_4_lanes(a,b) returns their dot-product. With USE_DOT8_HW it uses the
+ *  real instruction; without it, a plain-C fallback - so the same code runs anywhere.
+ *  BIG PICTURE: How C code talks to the custom instruction.
+ * ==========================================================================
+ */
+
+/*
  * DOT8 (4-lane signed int8 dot-product) — C API for custom instruction.
  *
  * Defining USE_DOT8_HW requires the SoC to include the corresponding HW block (VexRiscv

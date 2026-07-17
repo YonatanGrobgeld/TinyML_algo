@@ -1,4 +1,12 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Header declaring test_lut().
+ *  BIG PICTURE: Run before trusting/benchmarking the LUT.
+ * ==========================================================================
+ */
+
+/*
  * Exp LUT on-target self-test.
  * Link with code that provides uart_write_char. Returns 0 on PASS, nonzero on FAIL.
  */

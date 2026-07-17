@@ -1,4 +1,17 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Adds ONE NEW INSTRUCTION to the CPU itself. VexRiscv (the RISC-V CPU) is written in
+ *  SpinalHDL/Scala and accepts 'plugins'; this plugin watches every instruction, and when
+ *  it sees opcode 0x0B with funct7 0x01 (a code reserved for custom use), it treats the two
+ *  source registers as 4 packed int8 numbers each, does 4 multiplies + adds them (one adder
+ *  tree, 4 DSP blocks) in a single cycle, and writes the int32 result to the destination
+ *  register like any normal instruction.
+ *  BIG PICTURE: The hardware half of DOT8; the C half is hw_extensions/dot8/sw/dot8.c.
+ * ==========================================================================
+ */
+
+/*
  * VexRiscv plugin: DOT8/DOT4 custom instruction (4-lane signed int8 dot-product).
  *
  * Opcode: custom-0 = 0x0B. funct7 = 0x01.
@@ -41,6 +54,8 @@ class Dot8Plugin extends Plugin[VexRiscv] {
     val writeback = pipeline.writeback
 
     val instr = decode.input(INSTRUCTION)
+    /* SIMPLE WORDS: watch every instruction; when the low 7 bits are 0x0B and
+     * the top 7 bits are 0x01, this instruction is OURS. */
     val isDot8 = (instr(6 downto 0) === DOT8_OPCODE) && (instr(31 downto 25) === DOT8_FUNCT7)
 
     decode.insert(DOT8_OPCODE_STAGEABLE) := isDot8
@@ -60,9 +75,13 @@ class Dot8Plugin extends Plugin[VexRiscv] {
     val b2 = rs2Bits(23 downto 16).asSInt.resize(32)
     val b3 = rs2Bits(31 downto 24).asSInt.resize(32)
 
+    /* SIMPLE WORDS: the whole point - 4 signed multiplies and a 3-add tree,
+     * done in the single execute stage (maps to 4 DSP blocks on the FPGA). */
     val dotResult = (a0 * b0) + (a1 * b1) + (a2 * b2) + (a3 * b3)
     execute.insert(DOT8_RD) := dotResult
 
+    /* SIMPLE WORDS: in the writeback stage, put our answer into the
+     * destination register - exactly like any normal instruction would. */
     when(writeback.input(DOT8_OPCODE_STAGEABLE)) {
       writeback.output(REGFILE_WRITE_DATA) := writeback.input(DOT8_RD).asBits
     }

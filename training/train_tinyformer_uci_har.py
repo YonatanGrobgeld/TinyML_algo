@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  STEP 3: trains the TinyFormer (same structure as the C code: Q/K/V/O projections + FFN,
+#  S=16, D=32, FFN=64, 1 head) plus a 6-class classifier head, in PyTorch with float math.
+#  Saves the learned weights to artifacts/state_dict.pt and artifacts/classifier.npz.
+#  This float model is also the accuracy reference the int8 C version is compared to.
+#  BIG PICTURE: Where the model's knowledge is learned - on a PC, not on the FPGA.
+# ==========================================================================
+
 """
 Train a TinyFormer-based classifier on UCI HAR (preprocessed) and export
 weights compatible with litex_port/tinyformer.c and tools/export_weights.py.

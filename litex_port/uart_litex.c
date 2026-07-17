@@ -1,4 +1,13 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  UART (serial printing) driver, same idea as common/uart_litex.c.
+ *  BIG PICTURE: See common/uart_litex.c.
+ * ==========================================================================
+ */
+
+/*
  * Golden minimal UART implementation for LiteX.
  *
  * Compile with -DUSE_LITEX_UART and -I<litex_build>/software/include

@@ -1,4 +1,13 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  NOTE: this is the OLDER flat-layout copy; the canonical version used by the documented builds lives in litex_port/common/.
+ *  UART driver header.
+ *  BIG PICTURE: See common/uart_litex.h.
+ * ==========================================================================
+ */
+
+/*
  * Minimal UART API for LiteX bare-metal firmware.
  *
  * When building with LiteX, add -DUSE_LITEX_UART and -I<path_to_generated>,

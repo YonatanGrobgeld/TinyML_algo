@@ -1,3 +1,9 @@
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Vivado Tcl script: compiles exp_lut.v + tb_lut.sv and runs the LUT simulation.
+#  BIG PICTURE: One-command entry to the LUT RTL test.
+# ==========================================================================
+
 # Vivado 2025.2 xsim script for LUT testbench.
 
 # Compile DUT (exp_lut) first

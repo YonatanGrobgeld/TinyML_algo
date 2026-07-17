@@ -1,4 +1,16 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  How text gets from the FPGA to your PC screen over the serial (UART) cable.
+ *  Sends one character at a time: wait until the UART has room, then write the byte.
+ *  Handles two LiteX naming styles (uart_* or serial_*) chosen automatically by which
+ *  CSR macro exists; if the build has no UART at all it compiles to do-nothing stubs
+ *  so the rest of the firmware still links.
+ *  BIG PICTURE: Every printed line (MODE, ENC_CKSUM, CYCLES...) goes through this file.
+ * ==========================================================================
+ */
+
+/*
  * Golden minimal UART implementation for LiteX.
  *
  * Compile with -DUSE_LITEX_UART and -I<litex_build>/software/include
@@ -16,6 +28,9 @@
 
 #if defined(CSR_UART_RXTX_ADDR)
 /* UART exposed as uart_* (e.g. default LiteX UART) */
+/* SIMPLE WORDS: wait until the UART has room for one more character, then
+ * hand it the byte. Repeat per character - that is how every line reaches
+ * the PC terminal at 115200 baud. */
 void uart_write_char(char c) {
   while (uart_txfull_read())
     ;

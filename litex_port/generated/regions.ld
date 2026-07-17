@@ -1,3 +1,11 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Auto-generated linker fragment: the memory regions of this SoC - sample copy.
+ *  BIG PICTURE: Linker plumbing.
+ * ==========================================================================
+ */
+
 MEMORY {
 	rom : ORIGIN = 0x00000000, LENGTH = 0x00020000
 	sram : ORIGIN = 0x10000000, LENGTH = 0x00002000

@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  One-off helper used while reorganizing the report text.
+#  BIG PICTURE: Report tooling.
+# ==========================================================================
+
 """One-shot restructure of Project_Report.md:
 - Move Implementation chapter before Simulation (swap §3 and §4).
 - Renumber section headers, figures, and tables to document order.

@@ -1,4 +1,13 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  C-side interface for the matrix engine: register offsets, CTRL/STATUS bit definitions,
+ *  and the driver functions (load_x/load_w/load_b/start/wait_done/read_y/clear_done).
+ *  BIG PICTURE: The contract between firmware and the GEMV hardware.
+ * ==========================================================================
+ */
+
+/*
  * GEMV accelerator — C driver API (skeleton).
  *
  * Defining USE_GEMV_HW (in the firmware that uses this driver) requires the SoC to include

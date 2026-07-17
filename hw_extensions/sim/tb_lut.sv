@@ -1,3 +1,13 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  SIMULATION test for the exp LUT: sweeps all 16 indices and compares each output against
+ *  the golden file expected_lut.mem; auto-detects whether the output is combinational or
+ *  registered. $fatal on mismatch.
+ *  BIG PICTURE: Proves the hardware table matches the golden values before SoC integration.
+ * ==========================================================================
+ */
+
 `timescale 1ns/1ps
 
 /*

@@ -1,4 +1,14 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  On-target SELF-TEST for the EXP-LUT peripheral: reads all 16 table entries from the
+ *  hardware and compares each against the golden software table (1024, 754, 556, ...),
+ *  and also checks the score_to_exp clamping. Prints 'LUT PASS' or a FAIL line over UART.
+ *  BIG PICTURE: Proves the hardware table is byte-identical to the software one.
+ * ==========================================================================
+ */
+
+/*
  * Exp LUT on-target self-test: golden table vs exp_lut_hw; score_to_exp mapping.
  * Golden matches tinyformer.c exp_lut[16]. No printf/libc.
  */

@@ -1,3 +1,14 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The FINAL DECISION-MAKER: a small 6x32 weight matrix + 6 biases (int8). After the
+ *  encoder output is averaged into one 32-number summary, this linear classifier gives
+ *  each of the 6 activities a score; the highest score is the prediction.
+ *  AUTO-GENERATED from the trained PyTorch classifier head.
+ *  BIG PICTURE: Turns the encoder's summary into 'walking / sitting / standing / ...'.
+ * ==========================================================================
+ */
+
 #include <stdint.h>
 #include "demo_classifier.h"
 

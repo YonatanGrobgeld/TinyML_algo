@@ -1,3 +1,12 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The MEMORY MAP for the firmware: tells the linker where in RAM the code (.text),
+ *  data (.data/.bss) and stack live for this LiteX SoC.
+ *  BIG PICTURE: Wrong addresses here = firmware that loads but does nothing.
+ * ==========================================================================
+ */
+
 INCLUDE generated/output_format.ld
 ENTRY(_start)
 

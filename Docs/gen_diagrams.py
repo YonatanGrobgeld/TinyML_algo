@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# ==========================================================================
+#  WHAT THIS FILE DOES (in simple words):
+#  Helper that generated the draw.io/figure diagrams for the report.
+#  BIG PICTURE: Report tooling, not part of the system.
+# ==========================================================================
+
 """Generate draw.io (.drawio.xml) files for Figures 2-9 of the TinyFormer report.
 Labels use only XML-safe characters (no raw < & "); newlines via &#10;.
 """

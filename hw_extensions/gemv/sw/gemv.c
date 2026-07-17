@@ -1,4 +1,16 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Driver for the matrix engine (v2): packs 4 int8 values per 32-bit bus write (pack4_i8 -
+ *  the 4x bus saving), streams X/W/b in, writes the config then config+START (two writes so
+ *  the settings are latched before start fires), polls STATUS until done (with a safety
+ *  timeout), and reads Y back one element at a time, writing Y_NEXT after each read to
+ *  advance the hardware's pointer.
+ *  BIG PICTURE: How tinyformer.c's matvec hands its work to the hardware.
+ * ==========================================================================
+ */
+
+/*
  * GEMV accelerator — C driver (V2).
  *
  * V2 vs V1:
@@ -47,6 +59,8 @@
 static uintptr_t s_gemv_base;
 
 /* Pack four signed int8 lanes into a 32-bit word, lane 0 = LSB. */
+/* SIMPLE WORDS: squeeze 4 small (int8) numbers into one 32-bit word so a
+ * single bus write carries 4 values - this is the '4x less bus traffic' win. */
 static inline uint32_t pack4_i8(const int8_t *p)
 {
     return  ((uint32_t)(uint8_t)p[0])
@@ -101,6 +115,9 @@ void gemv_start(int len, int out_dim, int enable_bias)
     if (enable_bias)   config |= GEMV_CTRL_ENABLE_BIAS;
     /* Write config bits first so ctrl.storage latches them before START fires.
      * The LiteX wrapper reads len_64/out_dim_64/bias_en from ctrl.storage. */
+    /* SIMPLE WORDS: two writes on purpose - first store the settings (sizes,
+     * bias on/off), THEN settings+START, so the start pulse fires only after
+     * the hardware has already latched the correct configuration. */
     GEMV_WRITE_CTRL(config);
     GEMV_WRITE_CTRL(config | GEMV_CTRL_START);
 }
@@ -120,6 +137,9 @@ void gemv_read_y(int32_t *y, int out_dim)
 {
     if (y == NULL) return;
     for (int i = 0; i < out_dim; i++) {
+        /* SIMPLE WORDS: read one answer, then poke Y_NEXT to tell the
+         * hardware 'move your pointer to the next one' (reading alone does
+         * NOT advance it - a classic bug source if forgotten). */
         y[i] = (int32_t)GEMV_READ_Y();
         GEMV_WRITE_Y_NEXT();  /* advance Y read pointer for next element */
     }

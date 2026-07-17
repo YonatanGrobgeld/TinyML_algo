@@ -1,3 +1,11 @@
+/*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  Minimal LiteX-style system header (cache flush etc.).
+ *  BIG PICTURE: Plumbing so shared LiteX code compiles.
+ * ==========================================================================
+ */
+
 #ifndef __SYSTEM_H
 #define __SYSTEM_H
 
