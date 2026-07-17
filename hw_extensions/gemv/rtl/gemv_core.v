@@ -1,4 +1,18 @@
 /*
+ * ==========================================================================
+ *  WHAT THIS FILE DOES (in simple words):
+ *  The MATRIX ENGINE (v3) in Verilog: computes Y = W*X + b for int8 matrix/vector with
+ *  32 or 64 dimensions. The CPU first streams X, W, b into internal memories (4 packed
+ *  int8 values per 32-bit write - 4x fewer bus writes than v1), then pulses 'start'.
+ *  A state machine (IDLE -> COMPUTE -> DONE) sweeps each row: the 'dot4' 4-lane MAC does
+ *  4 multiplies+adds per column word, now PIPELINED across fetch -> multiply -> accumulate
+ *  stages (result bit-identical to v2) so the design meets timing at 100 MHz. It raises
+ *  'done'; the CPU reads results one at a time via Y_OUT, poking Y_NEXT to advance.
+ *  BIG PICTURE: The hardware that removed the 21% matvec bottleneck; 32x32 matvec in ~288 compute cycles.
+ * ==========================================================================
+ */
+
+/*
  * GEMV core v3: Y = W * X + b (optional).
  * int8 W, X; int32 b, Y.  LEN and OUT_DIM = 32 or 64.
  *
