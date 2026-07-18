@@ -25,9 +25,10 @@ peripheral) speed inference up 4.82× (759 ms → 157.55 ms) with bit-identical 
 ## `litex_port/` — the firmware (the C code that runs on the FPGA's RISC-V CPU)
 
 **Layout note:** the *canonical* sources live in `litex_port/common/` plus the six mode
-directories. The `.c/.h` files sitting flat in `litex_port/` itself are an **older
-flat-layout copy** kept for reference — when a filename exists in both places, the
-`common/` version is the one the documented builds use.
+directories. (An older flat-layout copy of these files used to sit in `litex_port/`
+itself; those duplicates have been removed — `common/` is the single source of truth.
+The self-tests `tests_*.c/h` remain in `litex_port/` root, as do the build/boot files
+`Makefile`, `crt0.S`, `linker.ld`, `isr.c`.)
 
 ### `litex_port/common/` — shared firmware sources (used by every build mode)
 
@@ -73,8 +74,6 @@ Each mode's `main_*.c` prints its `MODE:` banner and calls the shared `demo_run(
 | `isr.c` | Empty interrupt handler (the design polls; no interrupts). |
 | `include/` | Minimal LiteX-style system headers (CSR access, irq, system) so the firmware compiles standalone. |
 | `generated/` | **Sample** of the files LiteX auto-generates for the SoC (`csr.h` = the address book of all peripheral registers, `soc.h` = clock frequency, `mem.h`, linker fragments...). The real ones come from the separate LiteX SoC build tree. |
-| `main.c`, `demo_main.c` + flat `.c/.h` copies | Older flat-layout versions kept for reference (see layout note above). |
-| `firmware.elf` / `firmware.bin` | A prebuilt firmware binary. |
 | `BUILD_INSTRUCTIONS.md`, `WINDOWS_INSTRUCTIONS.md`, `LITEX_FIRMWARE_REVIEW.md` | Build and integration notes. |
 
 ---

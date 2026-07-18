@@ -8,7 +8,7 @@
 # ==========================================================================
 
 """
-Export trained TinyFormer encoder weights to C int8_t arrays for litex_port/tinyformer.c.
+Export trained TinyFormer encoder weights to C int8_t arrays for litex_port/common/tinyformer.c.
 
 Hyperparameters (fixed by C):
   S   = 16
@@ -30,11 +30,11 @@ Expected PyTorch checkpoint (state_dict or {"state_dict": ...}) keys:
 All weights/biases are quantized to signed int8 with clipping to [-127, 127]
 and written as:
 
-  litex_port/trained_weights.h
-  litex_port/trained_weights.c
+  litex_port/common/trained_weights.h
+  litex_port/common/trained_weights.c
 
 Usage (from repo root TinyML_algo/):
-  python3 tools/export_weights.py --checkpoint path/to/state_dict.pt --output-dir litex_port
+  python3 tools/export_weights.py --checkpoint path/to/state_dict.pt --output-dir litex_port/common
 """
 
 import argparse
@@ -165,8 +165,8 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="litex_port",
-        help="Directory for trained_weights.h/.c (default: litex_port).",
+        default="litex_port/common",
+        help="Directory for trained_weights.h/.c (default: litex_port/common).",
     )
     args = parser.parse_args()
 

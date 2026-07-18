@@ -10,7 +10,7 @@
 
 """
 Train a TinyFormer-based classifier on UCI HAR (preprocessed) and export
-weights compatible with litex_port/tinyformer.c and tools/export_weights.py.
+weights compatible with litex_port/common/tinyformer.c and tools/export_weights.py.
 
 Input:
   data/uci_har_processed/uci_har_processed.npz (see preprocess_uci_har.py)

@@ -177,7 +177,7 @@ At the top level:
   - **`accel_dot8/`**, **`accel_lut/`**, **`accel_gemv/`**, **`accel_dot8_lut/`**, **`accel_all/`** – Hardware-accelerated variants; same demo flow, different macros (see §11).
 - **Self-tests (in `litex_port/` root):** `tests_dot8.c/h`, `tests_lut.c/h`, `tests_gemv.c/h` — link with the corresponding driver (`dot8.c`, `exp_lut.c`, `gemv.c`) and UART; see §10 and playbook D.
 
-Legacy/original files also in `litex_port/` root: `tinyformer.h/c`, `main.c`, `demo_main.c`, `uart_litex.c/h`, `trained_weights.c/h`, `demo_samples.c/h`, `demo_classifier.c/h` (duplicated in `common/` for the new layout).
+All shared firmware sources live in `litex_port/common/`; each mode directory adds only its own `main_*.c`. (The old flat-layout duplicates that previously sat in `litex_port/` root have been removed — `common/` is the single source of truth.)
 
 TinyFormer encoder (`tinyformer.c`): Q/K/V projections; streaming scaled dot-product attention with max-subtraction softmax and LUT; output projection and residual; feed-forward (ReLU) and final residual; int8 weights/activations, int32 accumulators.
 
@@ -259,23 +259,24 @@ Use these compiler flags when building the firmware that includes `litex_port/`:
 
 Compile and link these **C sources** (headers are pulled in via `#include`):
 
-- `litex_port/tinyformer.c`
-- `litex_port/trained_weights.c`
-- `litex_port/demo_samples.c`
-- `litex_port/demo_classifier.c`
-- `litex_port/demo_main.c` (UCI HAR demo) **or** `litex_port/main.c` (checksum demo)
-- `litex_port/uart_litex.c`
+- `litex_port/common/tinyformer.c`
+- `litex_port/common/trained_weights.c`
+- `litex_port/common/demo_samples.c`
+- `litex_port/common/demo_classifier.c`
+- `litex_port/common/demo_runner.c`
+- one mode main, e.g. `litex_port/baseline/main_baseline.c` (see §11 for the six modes)
+- `litex_port/common/uart_litex.c`
 
-Ensure the compiler can find headers in `litex_port/` (e.g. `-I<path_to_repo>/litex_port` or add `litex_port` to your include path).
+Ensure the compiler can find headers in `litex_port/common/` (e.g. `-I<path_to_repo>/litex_port/common` or add it to your include path). The `litex_port/Makefile` already does all of this — `make TARGET=<mode>` is the recommended path.
 
 ### 6. UART behavior
 
 - **Mode**: blocking, polling only. No interrupts, no `printf`, no libc.
-- **Implementation**: `litex_port/uart_litex.c` selects the implementation at compile time using LiteX-generated CSR address macros:
+- **Implementation**: `litex_port/common/uart_litex.c` selects the implementation at compile time using LiteX-generated CSR address macros:
   - If `CSR_UART_RXTX_ADDR` is defined: uses `uart_txfull_read()` and `uart_rxtx_write()`.
   - Else if `CSR_SERIAL_RXTX_ADDR` is defined: uses `serial_txfull_read()` and `serial_rxtx_write()`.
   - If neither is defined (or `USE_LITEX_UART` is not set): compiles as a stub; no characters are sent.
-- **API**: the rest of the firmware calls `uart_write_char(char c)` only; `uart_write_string` and numeric printers in `main.c` / `demo_main.c` are built on top of it.
+- **API**: the rest of the firmware calls `uart_write_char(char c)` only; `uart_write_string` and the numeric printers in `demo_runner.c` and the mode mains are built on top of it.
 
 ### 7. What this repo does not provide
 
@@ -468,10 +469,10 @@ To use trained TinyFormer weights with the C inference kernel in `litex_port/`:
 
   This generates:
 
-  - `litex_port/trained_weights.h`
-  - `litex_port/trained_weights.c`
+  - `litex_port/common/trained_weights.h`
+  - `litex_port/common/trained_weights.c`
 
-  containing quantized `int8_t` weights and biases that match the layout expected by `litex_port/tinyformer.c`.
+  containing quantized `int8_t` weights and biases that match the layout expected by `litex_port/common/tinyformer.c`.
 
 - **Enabling trained weights in C**:  
   The TinyFormer implementation supports a compile-time switch:
@@ -485,7 +486,7 @@ To use trained TinyFormer weights with the C inference kernel in `litex_port/`:
 ## UCI HAR End-to-End Demo
 
 This repository includes an end-to-end pipeline that trains a TinyFormer-based classifier on the UCI HAR dataset (using the raw inertial signals) and exports both:
-- Quantized TinyFormer encoder weights for the C implementation in `litex_port/tinyformer.c`, and
+- Quantized TinyFormer encoder weights for the C implementation in `litex_port/common/tinyformer.c`, and
 - A small set of preprocessed demo samples that can be run on an FPGA target (VexRiscv + LiteX).
 
 ### Steps to run the full pipeline
@@ -505,9 +506,9 @@ python3 training/export_and_make_fpga_demo.py
   - `artifacts/state_dict.pt` (TinyFormer encoder weights with keys `W_q`, `W_k`, `W_v`, `W_o`, `W_ff1`, `W_ff2`, `b_q`, `b_k`, `b_v`, `b_o`, `b_ff1`, `b_ff2`)
   - `artifacts/classifier.npz` (classifier head weights `W_cls[6,32]`, `b_cls[6]`).
 - `export_and_make_fpga_demo.py`:
-  - Runs `tools/export_weights.py` on `artifacts/state_dict.pt` to create `litex_port/trained_weights.c/h`.
-  - Selects a small set of test samples, quantizes them to int8, and writes `litex_port/demo_samples.c/h`.
-  - Quantizes the classifier head weights and writes `litex_port/demo_classifier.c/h`.
+  - Runs `tools/export_weights.py` on `artifacts/state_dict.pt` to create `litex_port/common/trained_weights.c/h`.
+  - Selects a small set of test samples, quantizes them to int8, and writes `litex_port/common/demo_samples.c/h`.
+  - Quantizes the classifier head weights and writes `litex_port/common/demo_classifier.c/h`.
 
 ### What’s in this repo
 
@@ -531,12 +532,12 @@ This repository is self-contained and includes:
 On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
 
 1. **Build firmware**  
-   Include the following files in your LiteX bare-metal build:
-   - `litex_port/tinyformer.c`, `litex_port/tinyformer.h`
-   - `litex_port/main.c` (checksum demo) or `litex_port/demo_main.c` (UCI HAR classification demo)
-   - `litex_port/trained_weights.c`, `litex_port/trained_weights.h`
-   - `litex_port/demo_samples.c`, `litex_port/demo_samples.h`
-   - `litex_port/demo_classifier.c`, `litex_port/demo_classifier.h`
+   Include the following files in your LiteX bare-metal build (or simply run `make TARGET=<mode>` in `litex_port/`):
+   - `litex_port/common/tinyformer.c`, `litex_port/common/tinyformer.h`
+   - a mode main, e.g. `litex_port/baseline/main_baseline.c`, plus `litex_port/common/demo_runner.c`
+   - `litex_port/common/trained_weights.c`, `litex_port/common/trained_weights.h`
+   - `litex_port/common/demo_samples.c`, `litex_port/common/demo_samples.h`
+   - `litex_port/common/demo_classifier.c`, `litex_port/common/demo_classifier.h`
 
    Compile with:
 
@@ -547,7 +548,7 @@ On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
    so that `tinyformer.c` uses the trained weights exported by the Python tooling.
 
 2. **UART wiring**  
-   Implement `uart_write_char` in `main.c` or `demo_main.c` to write to the LiteX UART MMIO registers. The helper functions `uart_write_string` and the demo printing logic will then send checksums or predicted labels to the serial console.
+   `litex_port/common/uart_litex.c` provides `uart_write_char` (compile with `-DUSE_LITEX_UART` and the generated `csr.h` on the include path). The helper functions `uart_write_string` and the demo printing logic then send checksums and predicted labels to the serial console.
 
 3. **Run via litex_term**  
    After building the firmware, load it on the FPGA using:
@@ -563,9 +564,9 @@ On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
 
 - The TinyFormer encoder and classifier have been **trained on the UCI HAR dataset** using the scripts in `training/`.
 - The exported, FPGA-ready artifacts are **already committed**:
-  - `litex_port/trained_weights.c/h`
-  - `litex_port/demo_samples.c/h`
-  - `litex_port/demo_classifier.c/h`
+  - `litex_port/common/trained_weights.c/h`
+  - `litex_port/common/demo_samples.c/h`
+  - `litex_port/common/demo_classifier.c/h`
 - This means your friend can clone the repo, build the LiteX firmware with these files, and immediately run the UCI HAR demo on the FPGA without retraining.
 
 ### FPGA Quickstart — Nexys 4 DDR + VexRiscv + LiteX
@@ -575,17 +576,17 @@ On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
 
 2. **Build firmware including these sources**  
    Add the following C sources to your LiteX firmware build:
-   - `litex_port/tinyformer.c`
-   - `litex_port/demo_main.c`
-   - `litex_port/trained_weights.c`
-   - `litex_port/demo_samples.c`
-   - `litex_port/demo_classifier.c`
+   - `litex_port/common/tinyformer.c`
+   - `litex_port/common/demo_runner.c` + a mode main (e.g. `litex_port/baseline/main_baseline.c`)
+   - `litex_port/common/trained_weights.c`
+   - `litex_port/common/demo_samples.c`
+   - `litex_port/common/demo_classifier.c`
 
    Make sure the corresponding headers are in the include path:
-   - `litex_port/tinyformer.h`
-   - `litex_port/demo_samples.h`
-   - `litex_port/demo_classifier.h`
-   - `litex_port/trained_weights.h`
+   - `litex_port/common/tinyformer.h`
+   - `litex_port/common/demo_samples.h`
+   - `litex_port/common/demo_classifier.h`
+   - `litex_port/common/trained_weights.h`
 
    Compile with:
 
@@ -596,7 +597,7 @@ On the LiteX/VexRiscv target (e.g., Nexys 4 DDR):
    so that `tinyformer.c` uses the trained weights from `trained_weights.c` instead of the placeholder zeros.
 
 3. **Wire UART MMIO**  
-   - In `demo_main.c`, implement `uart_write_char` using the LiteX-generated CSR headers (e.g. `build/<target>/software/include/generated/csr.h`):
+   - `litex_port/common/uart_litex.c` implements `uart_write_char` using the LiteX-generated CSR headers (e.g. `build/<target>/software/include/generated/csr.h`):
      - Poll `uart_txfull` until space is available.
      - Write the character to `uart_rxtx`.
    - The helper functions `uart_write_string` and the demo code will then print to the serial console.
@@ -636,9 +637,9 @@ This will:
   - `artifacts/state_dict.pt`
   - `artifacts/classifier.npz`
 - Re-export updated FPGA artifacts:
-  - `litex_port/trained_weights.c/h`
-  - `litex_port/demo_samples.c/h`
-  - `litex_port/demo_classifier.c/h`
+  - `litex_port/common/trained_weights.c/h`
+  - `litex_port/common/demo_samples.c/h`
+  - `litex_port/common/demo_classifier.c/h`
 
 Rebuild your LiteX firmware after retraining to pick up the new weights and demo samples.
 

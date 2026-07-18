@@ -13,19 +13,19 @@ Export trained TinyFormer weights and generate FPGA demo samples.
 
 This script:
   1) Runs tools/export_weights.py on artifacts/state_dict.pt to generate:
-       - litex_port/trained_weights.h
-       - litex_port/trained_weights.c
+       - litex_port/common/trained_weights.h
+       - litex_port/common/trained_weights.c
   2) Loads data/uci_har_processed/uci_har_processed.npz and selects a small set of test samples.
   3) Quantizes these samples to int8 using a global scale factor.
   4) Writes:
-       - litex_port/demo_samples.h
-       - litex_port/demo_samples.c
+       - litex_port/common/demo_samples.h
+       - litex_port/common/demo_samples.c
      containing:
        const int8_t  demo_inputs[DEMO_NUM_SAMPLES][16][32];
        const uint8_t demo_labels[DEMO_NUM_SAMPLES];
   5) Loads artifacts/classifier.npz and exports a simple classifier head:
-       - litex_port/demo_classifier.h
-       - litex_port/demo_classifier.c
+       - litex_port/common/demo_classifier.h
+       - litex_port/common/demo_classifier.c
      containing:
        const int8_t cls_W[6][32];
        const int8_t cls_b[6];
@@ -53,7 +53,7 @@ def run_export_weights(repo_root: Path) -> None:
         "--checkpoint",
         str(ckpt),
         "--output-dir",
-        "litex_port",
+        "litex_port/common",
     ]
     print("Running:", " ".join(cmd))
     subprocess.check_call(cmd, cwd=repo_root)
@@ -92,7 +92,7 @@ def quantize_inputs(X: np.ndarray, scale: float = 32.0) -> np.ndarray:
 
 
 def write_demo_samples(repo_root: Path, X_demo_q: np.ndarray, y_demo: np.ndarray) -> None:
-    litex_dir = repo_root / "litex_port"
+    litex_dir = repo_root / "litex_port" / "common"
     litex_dir.mkdir(parents=True, exist_ok=True)
 
     h_path = litex_dir / "demo_samples.h"
@@ -146,7 +146,7 @@ def quantize_classifier(W_cls: np.ndarray, b_cls: np.ndarray, scale: float = 32.
 
 
 def write_demo_classifier(repo_root: Path, Wq: np.ndarray, bq: np.ndarray) -> None:
-    litex_dir = repo_root / "litex_port"
+    litex_dir = repo_root / "litex_port" / "common"
     h_path = litex_dir / "demo_classifier.h"
     c_path = litex_dir / "demo_classifier.c"
 
